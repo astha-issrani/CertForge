@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Plus, Edit, Trash2, Eye, Copy, Star } from 'lucide-react'
+import { Plus, Edit, Trash2, Eye, Copy, Star, Upload } from 'lucide-react'
 import axios from 'axios'
 import './Templates.css'
 
@@ -106,6 +106,11 @@ export default function Templates() {
           <Plus size={18} />
           New Template
         </button>
+        <button className="btn-create" onClick={() => navigate('/templates/upload')}
+  style={{ background: '#4a90e2' }}>
+  <Upload size={18} />
+  Upload Template
+</button>
       </div>
 
       {loading ? (

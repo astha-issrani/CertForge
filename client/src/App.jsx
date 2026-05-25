@@ -6,6 +6,9 @@ import TemplateEditor from './pages/TemplateEditor'
 import GenerateSingle from './pages/GenerateSingle'
 import BulkGenerate from './pages/BulkGenerate'
 import CertificateHistory from './pages/CertificateHistory'
+import TemplateUploadEditor from './pages/TemplateUploadEditor'
+
+// inside your routes:
 
 export default function App() {
   return (
@@ -15,6 +18,7 @@ export default function App() {
           <Route index element={<Dashboard />} />
           <Route path="templates" element={<Templates />} />
           <Route path="templates/editor/:id?" element={<TemplateEditor />} />
+          <Route path="templates/upload" element={<TemplateUploadEditor onBack={() => window.history.back()} />} />
           <Route path="generate" element={<GenerateSingle />} />
           <Route path="bulk" element={<BulkGenerate />} />
           <Route path="history" element={<CertificateHistory />} />

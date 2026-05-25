@@ -113,6 +113,29 @@ const PREBUILT_TEMPLATES = [
       signerTitle: 'Coordinator',
       organizationName: 'SlateWorks'
     }
+  },
+  {
+    _id: 'prebuilt-6',
+    name: 'Persevex',
+    description: 'Clean professional certificate with logo and ISO seal for Persevex',
+    isPrebuilt: true,
+    design: {
+      backgroundColor: '#ffffff',
+      borderStyle: 'classic',
+      borderColor: '#1a1a4e',
+      accentColor: '#f5a623',
+      fontFamily: 'Georgia',
+      layout: 'landscape'
+    },
+    content: {
+      titleText: 'CERTIFICATE',
+      subtitleText: 'of Outstanding Performance',
+      presentedToText: 'This certificate is proudly presented to',
+      bodyText: 'This is to certify that the candidate has successfully completed the {courseName} course at Persevex, demonstrating strong commitment and competence throughout the program.',
+      signerName: 'Shanmukh Shekar K C',
+      signerTitle: 'Administrator',
+      organizationName: 'Persevex'
+    }
   }
 ];
 

@@ -3,7 +3,7 @@ const router = express.Router();
 const path = require('path');
 const fs = require('fs');
 const { v4: uuidv4 } = require('uuid');
-const { generateCertificateHTML } = require('../utils/generateHTML');
+const { generateCertificateHTML, generatePersevexHTML } = require('../utils/generateHTML');
 const { PREBUILT_TEMPLATES } = require('../data/prebuiltTemplates');
 
 let Template, Certificate, puppeteer;
@@ -25,8 +25,16 @@ router.post('/preview', async (req, res) => {
     
     let template = templateOverride || await getTemplate(templateId);
     if (!template) return res.status(404).json({ error: 'Template not found' });
-
-    const html = generateCertificateHTML(template, {
+const html = template._id === 'prebuilt-6'
+  ? generatePersevexHTML({ 
+      recipientName: recipientName || 'Student Name', 
+      dateFrom: dateFrom || '', 
+      dateTo: dateTo || '', 
+      customBody, 
+      courseName: req.body.courseName || 'Your Course', 
+      usnId: req.body.usnId || '' 
+    })
+  : generateCertificateHTML(template, {
       recipientName: recipientName || 'John Doe',
       dateFrom: dateFrom || '',
       dateTo: dateTo || '',
@@ -48,7 +56,9 @@ router.post('/generate', async (req, res) => {
     let template = templateOverride || await getTemplate(templateId);
     if (!template) return res.status(404).json({ error: 'Template not found' });
 
-    const html = generateCertificateHTML(template, { recipientName, dateFrom, dateTo, customBody });
+    const html = template._id === 'prebuilt-6'
+  ? generatePersevexHTML({ recipientName, dateFrom, dateTo, customBody, courseName: req.body.courseName, usnId: req.body.usnId })
+  : generateCertificateHTML(template, { recipientName, dateFrom, dateTo, customBody });
 
     if (!puppeteer) {
       // Fallback: return HTML as downloadable

@@ -198,11 +198,14 @@ export default function BulkGenerate() {
               <div className="format-guide">
                 <div className="format-title">Required CSV Columns</div>
                 <div className="format-cols">
-                  <span className="format-col required">name</span>
-                  <span className="format-col">dateFrom</span>
-                  <span className="format-col">dateTo</span>
-                  <span className="format-col optional">description</span>
-                </div>
+  <span className="format-col required">first name</span>
+  <span className="format-col required">last name</span>
+  <span className="format-col required">usn id</span>
+  <span className="format-col required">course name</span>
+  <span className="format-col">dateFrom</span>
+  <span className="format-col">dateTo</span>
+  <span className="format-col optional">description</span>
+</div>
               </div>
             </div>
           ) : (

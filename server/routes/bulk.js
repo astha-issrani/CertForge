@@ -5,7 +5,7 @@ const csv = require('csv-parse/sync');
 const path = require('path');
 const fs = require('fs');
 const { v4: uuidv4 } = require('uuid');
-const { generateCertificateHTML } = require('../utils/generateHTML');
+const { generateCertificateHTML, generatePersevexHTML } = require('../utils/generateHTML');
 const { PREBUILT_TEMPLATES } = require('../data/prebuiltTemplates');
 
 let Template, Certificate, puppeteer, archiver;
@@ -42,16 +42,41 @@ router.post('/generate', upload.single('csvFile'), async (req, res) => {
     if (!records.length) return res.status(400).json({ error: 'CSV file is empty' });
 
     // Normalize column names (case-insensitive)
-    const normalize = (row) => {
-      const lower = {};
-      for (const [k, v] of Object.entries(row)) lower[k.toLowerCase().trim()] = v;
-      return {
-        recipientName: lower['name'] || lower['recipient'] || lower['recipientname'] || lower['full name'] || 'Unknown',
-        dateFrom: lower['datefrom'] || lower['date from'] || lower['from'] || lower['start date'] || lower['startdate'] || '',
-        dateTo: lower['dateto'] || lower['date to'] || lower['to'] || lower['end date'] || lower['enddate'] || '',
-        customBody: lower['body'] || lower['description'] || lower['custombody'] || ''
-      };
-    };
+    const COURSE_DESCRIPTIONS = {
+  'web development': 'This is to certify that the candidate has successfully completed the Web Development course at Persevex, demonstrating strong commitment and competence throughout the program.',
+  'data science': 'This is to certify that the candidate has successfully completed the Data Science course at Persevex, demonstrating analytical skills and dedication throughout the program.',
+  'machine learning': 'This is to certify that the candidate has successfully completed the Machine Learning course at Persevex, showcasing technical excellence and problem-solving ability.',
+  'cybersecurity': 'This is to certify that the candidate has successfully completed the Cybersecurity course at Persevex, demonstrating expertise in securing digital systems.',
+  'ui/ux design': 'This is to certify that the candidate has successfully completed the UI/UX Design course at Persevex, showing creativity and user-centered design thinking.',
+  'cloud computing': 'This is to certify that the candidate has successfully completed the Cloud Computing course at Persevex, demonstrating proficiency in modern cloud platforms.',
+  'digital marketing': 'This is to certify that the candidate has successfully completed the Digital Marketing course at Persevex, demonstrating strategic and creative marketing skills.',
+};
+
+const normalize = (row) => {
+  const lower = {};
+  for (const [k, v] of Object.entries(row)) lower[k.toLowerCase().trim()] = v;
+
+  const firstName = lower['first name'] || lower['firstname'] || '';
+  const lastName = lower['last name'] || lower['lastname'] || '';
+  const fullName = lower['name'] || lower['full name'] || 
+    (firstName + ' ' + lastName).trim() || 'Unknown';
+
+  const courseName = lower['course name'] || lower['coursename'] || lower['course'] || '';
+  const courseKey = courseName.toLowerCase().trim();
+  const autoDescription = COURSE_DESCRIPTIONS[courseKey] || 
+    `This is to certify that the candidate has successfully completed the ${courseName} course at Persevex, demonstrating strong commitment and competence throughout the program.`;
+
+  return {
+    recipientName: fullName,
+    firstName,
+    lastName,
+    usnId: lower['usn id'] || lower['usnid'] || lower['usn'] || '',
+    courseName,
+    dateFrom: lower['datefrom'] || lower['date from'] || lower['from'] || lower['start date'] || '',
+    dateTo: lower['dateto'] || lower['date to'] || lower['to'] || lower['end date'] || '',
+    customBody: lower['body'] || lower['description'] || lower['custombody'] || autoDescription
+  };
+};
 
     const batchId = uuidv4();
     const outputDir = path.join(__dirname, '../output', batchId);
@@ -66,7 +91,9 @@ router.post('/generate', upload.single('csvFile'), async (req, res) => {
       for (let i = 0; i < records.length; i++) {
         const data = normalize(records[i]);
         try {
-          const html = generateCertificateHTML(template, data);
+         const html = template._id === 'prebuilt-6'
+  ? generatePersevexHTML(data)
+  : generateCertificateHTML(template, data);
           const page = await browser.newPage();
           await page.setContent(html, { waitUntil: 'networkidle0' });
           await page.setViewport({ width: 1122, height: 794 });
@@ -129,7 +156,9 @@ router.post('/generate', upload.single('csvFile'), async (req, res) => {
     for (let i = 0; i < records.length; i++) {
       const data = normalize(records[i]);
       try {
-        const html = generateCertificateHTML(template, data);
+       const html = template._id === 'prebuilt-6'
+  ? generatePersevexHTML(data)
+  : generateCertificateHTML(template, data);
         const filename = `cert_${data.recipientName.replace(/\s+/g, '_')}_${i + 1}.html`;
         const filePath = path.join(outputDir, filename);
         fs.writeFileSync(filePath, html);

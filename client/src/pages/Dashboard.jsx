@@ -74,22 +74,22 @@ export default function Dashboard() {
       </div>
 
       <div className="dash-csv-info">
-        <div className="csv-info-content">
-          <div className="csv-info-icon">📊</div>
-          <div>
-            <h3>CSV Format Guide</h3>
-            <p>Your CSV should have these columns: <code>name</code>, <code>dateFrom</code>, <code>dateTo</code></p>
-            <p style={{ marginTop: 6, opacity: 0.7, fontSize: 13 }}>Optional: <code>description</code> for custom body text per recipient</p>
-          </div>
-        </div>
-        <div className="csv-sample">
-          <div className="csv-header">Sample CSV</div>
-          <code className="csv-code">{`name,dateFrom,dateTo
-Alice Johnson,Jan 2024,Dec 2024
-Bob Smith,Mar 2024,Sep 2024
-Carol White,Jun 2024,Jun 2025`}</code>
-        </div>
-      </div>
+  <div className="csv-info-content">
+    <div className="csv-info-icon">📊</div>
+    <div>
+      <h3>CSV Format Guide</h3>
+      <p>Your CSV should have these columns: <code>first name</code>, <code>last name</code>, <code>usn id</code>, <code>course name</code>, <code>dateTo</code></p>
+      <p style={{ marginTop: 6, opacity: 0.7, fontSize: 13 }}>Optional: <code>description</code> for custom body text per recipient</p>
+    </div>
+  </div>
+  <div className="csv-sample">
+    <div className="csv-header">Sample CSV</div>
+    <code className="csv-code">{`first name,last name,usn id,course name,dateTo
+Alice,Johnson,USN001,Web Development,Dec 2024
+Bob,Smith,USN002,Data Science,Sep 2024
+Carol,White,USN003,UI/UX Design,Jun 2025`}</code>
+  </div>
+</div>
     </div>
   )
 }

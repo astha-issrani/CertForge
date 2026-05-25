@@ -80,13 +80,33 @@ router.post('/generate', async (req, res) => {
     const filename = `cert_${recipientName.replace(/\s+/g, '_')}_${uuidv4().slice(0,8)}.pdf`;
     const filePath = path.join(__dirname, '../output', filename);
 
-    await page.pdf({
-      path: filePath,
-      width: '1122px',
-      height: '794px',
-      printBackground: true
-    });
-    await browser.close();
+    const pdfBuffer = await page.pdf({
+  width: '1122px',
+  height: '794px',
+  printBackground: true
+});
+await browser.close();
+
+// Save certificate to DB
+if (Certificate) {
+  const mongoose = require('mongoose');
+  const isValidObjectId = mongoose.Types.ObjectId.isValid(templateId);
+  const cert = new Certificate({
+    templateId: isValidObjectId ? templateId : null,
+    prebuiltTemplateId: !isValidObjectId ? templateId : null,
+    recipientName,
+    dateFrom,
+    dateTo,
+    customBody,
+    pdfPath: filename
+  });
+  await cert.save();
+}
+
+// Stream PDF directly to client
+res.setHeader('Content-Type', 'application/pdf');
+res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+return res.send(pdfBuffer);
 
     if (Certificate) {
   const mongoose = require('mongoose');

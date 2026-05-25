@@ -69,9 +69,10 @@ router.post('/upload-image', upload.single('image'), async (req, res) => {
     const imageBuffer = fs.readFileSync(imagePath);
     const base64Image = `data:${req.file.mimetype};base64,${imageBuffer.toString('base64')}`;
 
-    const Jimp = require('jimp');
-    const image = await Jimp.read(imagePath);
-    const { width, height } = image.bitmap;
+const sizeOf = require('image-size');
+const dimensions = sizeOf(imagePath);
+const width = dimensions.width;
+const height = dimensions.height;
 
     fs.unlinkSync(imagePath);
 

@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const { generateCertificateHTML, generatePersevexHTML, generateCustomHTML } = require('../utils/generateHTML');
 
 const certificateSchema = new mongoose.Schema({
   templateId: { 

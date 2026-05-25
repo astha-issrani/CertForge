@@ -5,7 +5,7 @@ const csv = require('csv-parse/sync');
 const path = require('path');
 const fs = require('fs');
 const { v4: uuidv4 } = require('uuid');
-const { generateCertificateHTML, generatePersevexHTML } = require('../utils/generateHTML');
+const { generateCertificateHTML, generatePersevexHTML, generateCustomHTML } = require('../utils/generateHTML');
 const { PREBUILT_TEMPLATES } = require('../data/prebuiltTemplates');
 
 let Template, Certificate, puppeteer, archiver;

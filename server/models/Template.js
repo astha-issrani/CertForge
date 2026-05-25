@@ -1,9 +1,17 @@
 const mongoose = require('mongoose');
-
+const { generateCertificateHTML, generatePersevexHTML, generateCustomHTML } = require('../utils/generateHTML');
 const templateSchema = new mongoose.Schema({
   name: { type: String, required: true },
   description: String,
   isPrebuilt: { type: Boolean, default: false },
+  isCustom: { type: Boolean, default: false },
+  customData: {
+    base64Image: String,
+    width: Number,
+    height: Number,
+    blocks: { type: Array, default: [] },
+    qrConfig: { type: Object, default: {} }
+  },
   design: {
     backgroundColor: { type: String, default: '#ffffff' },
     backgroundImage: String,

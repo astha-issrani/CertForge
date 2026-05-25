@@ -1,0 +1,173 @@
+.generate-page { max-width: 1200px; margin: 0 auto; }
+
+.gen-layout {
+  display: grid;
+  grid-template-columns: 380px 1fr;
+  gap: 24px;
+  align-items: start;
+}
+
+.gen-form {
+  background: white;
+  border: 1px solid var(--gray-200);
+  border-radius: 16px;
+  padding: 28px;
+  position: sticky;
+  top: 24px;
+}
+
+.gen-form-header {
+  display: flex; align-items: center; gap: 10px;
+  margin-bottom: 24px;
+  padding-bottom: 18px;
+  border-bottom: 1px solid var(--gray-100);
+  color: var(--navy);
+}
+.gen-form-header h2 { font-size: 20px; font-family: 'Inter', sans-serif; font-weight: 700; }
+
+.gen-section { margin-bottom: 18px; }
+.gen-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+
+.gen-label {
+  display: block;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--gray-600);
+  letter-spacing: 0.5px;
+  margin-bottom: 8px;
+  text-transform: uppercase;
+}
+
+.optional { font-weight: 400; color: var(--gray-400); text-transform: none; letter-spacing: 0; }
+
+.gen-input {
+  width: 100%;
+  padding: 10px 14px;
+  border: 1.5px solid var(--gray-200);
+  border-radius: 10px;
+  font-size: 14px;
+  color: var(--gray-800);
+  background: var(--gray-50);
+  transition: all 0.15s;
+}
+.gen-input:focus { border-color: var(--navy); background: white; box-shadow: 0 0 0 3px rgba(26,58,108,0.08); }
+.gen-input::placeholder { color: var(--gray-400); }
+
+.gen-textarea {
+  min-height: 90px;
+  resize: vertical;
+  line-height: 1.5;
+}
+
+.select-wrapper { position: relative; }
+.gen-select {
+  width: 100%;
+  padding: 10px 36px 10px 14px;
+  border: 1.5px solid var(--gray-200);
+  border-radius: 10px;
+  font-size: 14px;
+  color: var(--gray-800);
+  background: var(--gray-50);
+  appearance: none;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.gen-select:focus { border-color: var(--navy); background: white; }
+.select-arrow {
+  position: absolute; right: 12px; top: 50%;
+  transform: translateY(-50%);
+  color: var(--gray-400); pointer-events: none;
+}
+
+.gen-btn {
+  width: 100%;
+  display: flex; align-items: center; justify-content: center; gap: 10px;
+  background: linear-gradient(135deg, var(--navy), #2a5298);
+  color: white;
+  font-size: 15px;
+  font-weight: 700;
+  padding: 14px;
+  border-radius: 12px;
+  margin-top: 8px;
+  transition: all 0.2s;
+  letter-spacing: 0.3px;
+}
+.gen-btn:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(26,58,108,0.35); }
+.gen-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+
+.gen-result {
+  margin-top: 16px;
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  border-radius: 12px;
+  padding: 16px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  animation: fadeIn 0.3s ease;
+}
+.result-icon { font-size: 24px; }
+.result-info { flex: 1; }
+.result-title { font-size: 14px; font-weight: 700; color: #166534; }
+.result-sub { font-size: 12px; color: #166534; opacity: 0.7; }
+.result-download {
+  display: flex; align-items: center; gap: 6px;
+  background: var(--success);
+  color: white;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 8px 16px;
+  border-radius: 8px;
+  transition: all 0.15s;
+}
+.result-download:hover { background: #059669; }
+
+/* Preview */
+.gen-preview { }
+
+.gen-preview-label {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 12px; font-weight: 700;
+  color: var(--gray-500);
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  margin-bottom: 12px;
+}
+
+.prev-dot {
+  width: 8px; height: 8px;
+  background: var(--gold);
+  border-radius: 50%;
+  animation: pulse 1s ease infinite;
+}
+
+.gen-preview-frame {
+  background: white;
+  border: 1px solid var(--gray-200);
+  border-radius: 16px;
+  overflow: hidden;
+  min-height: 560px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.gen-iframe {
+  width: 100%;
+  height: 560px;
+  border: none;
+}
+
+.gen-preview-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  color: var(--gray-300);
+  text-align: center;
+}
+.gen-preview-empty p {
+  font-size: 14px;
+  max-width: 260px;
+  line-height: 1.6;
+}

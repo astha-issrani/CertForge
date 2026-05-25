@@ -68,7 +68,11 @@ router.post('/generate', async (req, res) => {
       return res.json({ success: true, url: `/output/${filename}`, type: 'html' });
     }
 
-    const browser = await puppeteer.launch({ args: ['--no-sandbox', '--disable-setuid-sandbox'] });
+   const browser = await puppeteer.launch({
+  headless: 'new',
+  executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || null,
+  args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage']
+});
     const page = await browser.newPage();
     await page.setContent(html, { waitUntil: 'networkidle0' });
     await page.setViewport({ width: 1122, height: 794 });

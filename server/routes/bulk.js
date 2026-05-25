@@ -86,7 +86,11 @@ const normalize = (row) => {
     const errors = [];
 
     if (puppeteer) {
-      const browser = await puppeteer.launch({ args: ['--no-sandbox', '--disable-setuid-sandbox'] });
+      const browser = await puppeteer.launch({
+  headless: 'new',
+  executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || null,
+  args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage']
+});
       
       for (let i = 0; i < records.length; i++) {
         const data = normalize(records[i]);

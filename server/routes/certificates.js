@@ -18,27 +18,26 @@ async function getTemplate(id) {
   return null;
 }
 
-// POST /api/certificates/preview - returns HTML preview
+function buildHTML(template, data) {
+  if (template._id === 'prebuilt-6') return generatePersevexHTML(data);
+  if (template.isCustom) return generateCustomHTML(template, data);
+  return generateCertificateHTML(template, data);
+}
+
+// POST /api/certificates/preview
 router.post('/preview', async (req, res) => {
   try {
-    const { templateId, recipientName, dateFrom, dateTo, customBody, templateOverride } = req.body;
-    
-    let template = templateOverride || await getTemplate(templateId);
+    const { templateId, recipientName, dateFrom, dateTo, customBody } = req.body;
+    let template = await getTemplate(templateId);
     if (!template) return res.status(404).json({ error: 'Template not found' });
-const html = template._id === 'prebuilt-6'
-  ? generatePersevexHTML({ 
-      recipientName: recipientName || 'Student Name', 
-      dateFrom: dateFrom || '', 
-      dateTo: dateTo || '', 
-      customBody, 
-      courseName: req.body.courseName || 'Your Course', 
-      usnId: req.body.usnId || '' 
-    })
-  : generateCertificateHTML(template, {
-      recipientName: recipientName || 'John Doe',
+
+    const html = buildHTML(template, {
+      recipientName: recipientName || 'Student Name',
       dateFrom: dateFrom || '',
       dateTo: dateTo || '',
-      customBody
+      customBody,
+      courseName: req.body.courseName || 'Your Course',
+      usnId: req.body.usnId || ''
     });
 
     res.setHeader('Content-Type', 'text/html');
@@ -48,83 +47,65 @@ const html = template._id === 'prebuilt-6'
   }
 });
 
-// POST /api/certificates/generate - generates PDF
+// POST /api/certificates/generate
 router.post('/generate', async (req, res) => {
   try {
-    const { templateId, recipientName, dateFrom, dateTo, customBody, templateOverride } = req.body;
-    
-    let template = templateOverride || await getTemplate(templateId);
+    const { templateId, recipientName, dateFrom, dateTo, customBody } = req.body;
+    let template = await getTemplate(templateId);
     if (!template) return res.status(404).json({ error: 'Template not found' });
 
-    const html = template._id === 'prebuilt-6'
-  ? generatePersevexHTML({ recipientName, dateFrom, dateTo, customBody, courseName: req.body.courseName, usnId: req.body.usnId })
-  : generateCertificateHTML(template, { recipientName, dateFrom, dateTo, customBody });
+    const html = buildHTML(template, {
+      recipientName,
+      dateFrom,
+      dateTo,
+      customBody,
+      courseName: req.body.courseName,
+      usnId: req.body.usnId
+    });
+
+    const filename = `cert_${(recipientName || 'cert').replace(/\s+/g, '_')}_${uuidv4().slice(0,8)}.pdf`;
 
     if (!puppeteer) {
-      // Fallback: return HTML as downloadable
-      const filename = `cert_${uuidv4()}.html`;
-      const filePath = path.join(__dirname, '../output', filename);
+      const filePath = path.join(__dirname, '../output', filename.replace('.pdf', '.html'));
       fs.writeFileSync(filePath, html);
-      return res.json({ success: true, url: `/output/${filename}`, type: 'html' });
+      return res.json({ success: true, url: `/output/${filename.replace('.pdf','.html')}`, type: 'html' });
     }
 
-   const browser = await puppeteer.launch({
-  headless: 'new',
-  executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || null,
-  args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage']
-});
+    const browser = await puppeteer.launch({
+      headless: 'new',
+      executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || null,
+      args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage']
+    });
     const page = await browser.newPage();
     await page.setContent(html, { waitUntil: 'networkidle0' });
     await page.setViewport({ width: 1122, height: 794 });
 
-    const filename = `cert_${recipientName.replace(/\s+/g, '_')}_${uuidv4().slice(0,8)}.pdf`;
-    const filePath = path.join(__dirname, '../output', filename);
-
     const pdfBuffer = await page.pdf({
-  width: '1122px',
-  height: '794px',
-  printBackground: true
-});
-await browser.close();
-
-// Save certificate to DB
-if (Certificate) {
-  const mongoose = require('mongoose');
-  const isValidObjectId = mongoose.Types.ObjectId.isValid(templateId);
-  const cert = new Certificate({
-    templateId: isValidObjectId ? templateId : null,
-    prebuiltTemplateId: !isValidObjectId ? templateId : null,
-    recipientName,
-    dateFrom,
-    dateTo,
-    customBody,
-    pdfPath: filename
-  });
-  await cert.save();
-}
-
-// Stream PDF directly to client
-res.setHeader('Content-Type', 'application/pdf');
-res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
-return res.send(pdfBuffer);
+      width: '1122px',
+      height: '794px',
+      printBackground: true
+    });
+    await browser.close();
 
     if (Certificate) {
-  const mongoose = require('mongoose');
-  const isValidObjectId = mongoose.Types.ObjectId.isValid(templateId);
-  
-  const cert = new Certificate({
-    templateId: isValidObjectId ? templateId : null,
-    prebuiltTemplateId: !isValidObjectId ? templateId : null,
-    recipientName,
-    dateFrom,
-    dateTo,
-    customBody,
-    pdfPath: filename
-  });
-  await cert.save();
-}
+      const mongoose = require('mongoose');
+      const isValidObjectId = mongoose.Types.ObjectId.isValid(templateId);
+      const cert = new Certificate({
+        templateId: isValidObjectId ? templateId : null,
+        prebuiltTemplateId: !isValidObjectId ? templateId : null,
+        recipientName,
+        dateFrom,
+        dateTo,
+        customBody,
+        pdfPath: filename
+      });
+      await cert.save();
+    }
 
-    res.json({ success: true, url: `/output/${filename}`, filename, type: 'pdf' });
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    return res.send(pdfBuffer);
+
   } catch (err) {
     console.error('PDF generation error:', err);
     res.status(500).json({ error: err.message });

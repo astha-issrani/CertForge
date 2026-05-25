@@ -15,7 +15,6 @@ function getPersevexImages() {
 function generatePersevexHTML(data) {
   const { logo, seal, sig } = getPersevexImages();
   const { recipientName, courseName, usnId, dateFrom, dateTo, customBody } = data;
-console.log('Persevex data:', { recipientName, courseName, usnId, dateFrom, dateTo });
 // Generate issued date from dateTo (e.g. "December 2024" → "1st December 2024")
 function formatIssuedDate(dateStr) {
   if (!dateStr) return '';
@@ -203,4 +202,116 @@ function generateCertificateHTML(template, data) {
 </html>`;
 }
 
-module.exports = { generateCertificateHTML, generatePersevexHTML };
+function generateCustomHTML(template, data) {
+  const { customData } = template;
+  if (!customData) return generateCertificateHTML(template, data);
+
+  const { base64Image, width, height, blocks } = customData;
+  const { recipientName, dateFrom, dateTo, customBody, courseName, usnId } = data;
+
+  const fullName = recipientName ||
+    ((data.firstName || '') + ' ' + (data.lastName || '')).trim();
+
+  const PLACEHOLDER_VALUES = {
+    name:     fullName,
+    course:   courseName || '',
+    usn:      usnId || '',
+    dateFrom: dateFrom || '',
+    dateTo:   dateTo || '',
+    body:     customBody || '',
+  };
+
+  function resolveText(block) {
+    if (block.fieldType === 'static') return block.text;
+    return PLACEHOLDER_VALUES[block.fieldType] || block.text;
+  }
+
+  function generateQRDataURL(text) {
+    // Simple QR placeholder — rendered as styled box in HTML
+    // For real QR, qrcode lib would be used server-side
+    return `<div style="width:${block.width}px;height:${block.height}px;background:#000;display:flex;align-items:center;justify-content:center;color:#fff;font-size:9px;text-align:center;padding:4px;">QR: ${text.substring(0,20)}</div>`;
+  }
+
+  const blockStyles = (blocks || [])
+    .filter(b => b.visible !== false)
+    .map(b => {
+      const resolvedText = resolveText(b);
+      if (b.fieldType === 'qr') {
+        return `
+        <div style="
+          position: absolute;
+          left: ${b.x}px; top: ${b.y}px;
+          width: ${b.width}px; height: ${b.height}px;
+          display: flex; align-items: center; justify-content: center;
+        ">
+          <img src="https://api.qrserver.com/v1/create-qr-code/?size=${Math.round(b.width)}x${Math.round(b.height)}&data=${encodeURIComponent(b.text)}"
+            style="width:100%;height:100%;object-fit:contain;" />
+        </div>`;
+      }
+      return `
+      <div style="
+        position: absolute;
+        left: ${b.x}px; top: ${b.y}px;
+        width: ${b.width}px; height: ${b.height}px;
+        font-size: ${b.fontSize}px;
+        font-family: ${b.fontFamily || 'Georgia'}, serif;
+        color: ${b.color || '#000'};
+        font-weight: ${b.bold ? 'bold' : 'normal'};
+        font-style: ${b.italic ? 'italic' : 'normal'};
+        text-align: ${b.align || 'center'};
+        display: flex;
+        align-items: center;
+        justify-content: ${b.align === 'left' ? 'flex-start' : b.align === 'right' ? 'flex-end' : 'center'};
+        overflow: hidden;
+        line-height: 1.2;
+      ">${resolvedText}</div>`;
+    }).join('\n');
+
+  const canvasW = width || 1122;
+  const canvasH = height || 794;
+
+  return `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    width: ${canvasW}px;
+    height: ${canvasH}px;
+    overflow: hidden;
+    background: #fff;
+  }
+  .cert-wrapper {
+    position: relative;
+    width: ${canvasW}px;
+    height: ${canvasH}px;
+    overflow: hidden;
+  }
+  .cert-bg {
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    object-fit: fill;
+    z-index: 0;
+  }
+  .cert-layer {
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    z-index: 1;
+  }
+</style>
+</head>
+<body>
+<div class="cert-wrapper">
+  ${base64Image ? `<img class="cert-bg" src="${base64Image}" alt="certificate" />` : ''}
+  <div class="cert-layer">
+    ${blockStyles}
+  </div>
+</div>
+</body>
+</html>`;
+}
+
+module.exports = { generateCertificateHTML, generatePersevexHTML, generateCustomHTML };

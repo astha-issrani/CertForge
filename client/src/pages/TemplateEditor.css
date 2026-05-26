@@ -11,6 +11,7 @@
   gap: 16px;
   margin-bottom: 20px;
   flex-shrink: 0;
+  flex-wrap: wrap;
 }
 
 .back-btn {
@@ -18,8 +19,7 @@
   font-size: 13px; font-weight: 500; color: var(--gray-600);
   background: white; border: 1px solid var(--gray-200);
   padding: 8px 14px; border-radius: 8px;
-  transition: all 0.15s;
-  white-space: nowrap;
+  transition: all 0.15s; white-space: nowrap;
 }
 .back-btn:hover { background: var(--gray-50); }
 
@@ -32,6 +32,7 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  min-width: 0;
 }
 
 .editor-actions { display: flex; gap: 10px; flex-shrink: 0; }
@@ -40,8 +41,7 @@
   display: flex; align-items: center; gap: 6px;
   background: white; border: 1px solid var(--gray-200);
   color: var(--navy); font-size: 13px; font-weight: 600;
-  padding: 8px 16px; border-radius: 8px;
-  transition: all 0.15s;
+  padding: 8px 16px; border-radius: 8px; transition: all 0.15s;
 }
 .preview-btn:hover { background: var(--gray-50); }
 .preview-btn:disabled { opacity: 0.6; cursor: not-allowed; }
@@ -50,8 +50,7 @@
   display: flex; align-items: center; gap: 8px;
   background: var(--navy); color: white;
   font-size: 13px; font-weight: 600;
-  padding: 8px 20px; border-radius: 8px;
-  transition: all 0.15s;
+  padding: 8px 20px; border-radius: 8px; transition: all 0.15s;
 }
 .save-btn:hover:not(:disabled) { background: #2a5298; }
 .save-btn:disabled { opacity: 0.7; cursor: not-allowed; }
@@ -81,12 +80,8 @@
 }
 
 .section-title {
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 2px;
-  text-transform: uppercase;
-  color: var(--gray-400);
-  margin-bottom: 16px;
+  font-size: 11px; font-weight: 700; letter-spacing: 2px;
+  text-transform: uppercase; color: var(--gray-400); margin-bottom: 16px;
 }
 
 .field { margin-bottom: 14px; }
@@ -99,95 +94,89 @@
   padding: 8px 12px;
   border: 1px solid var(--gray-200);
   border-radius: 8px;
-  font-size: 13px;
-  color: var(--gray-800);
+  font-size: 13px; color: var(--gray-800);
   background: var(--gray-50);
   transition: border-color 0.15s;
 }
 .field-input:focus { border-color: var(--navy); background: white; }
 
-.field-textarea {
-  min-height: 72px;
-  resize: vertical;
-  line-height: 1.5;
-}
+.field-textarea { min-height: 72px; resize: vertical; line-height: 1.5; }
 
 .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 
 .color-field {
   display: flex; align-items: center; gap: 10px;
   padding: 6px 10px;
-  background: var(--gray-50);
-  border: 1px solid var(--gray-200);
-  border-radius: 8px;
+  background: var(--gray-50); border: 1px solid var(--gray-200); border-radius: 8px;
 }
-
-.color-picker {
-  width: 28px; height: 28px;
-  border: none; border-radius: 6px;
-  cursor: pointer; padding: 0;
-  background: none;
-}
+.color-picker { width: 28px; height: 28px; border: none; border-radius: 6px; cursor: pointer; padding: 0; background: none; }
 .color-picker::-webkit-color-swatch { border-radius: 4px; border: 1px solid rgba(0,0,0,0.1); }
-
 .color-value { font-size: 12px; color: var(--gray-600); font-family: monospace; }
 
-.border-style-grid {
-  display: flex; gap: 6px; flex-wrap: wrap;
-}
-
+.border-style-grid { display: flex; gap: 6px; flex-wrap: wrap; }
 .border-style-btn {
   padding: 6px 14px;
   border: 1px solid var(--gray-200);
-  border-radius: 20px;
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--gray-600);
-  background: white;
-  transition: all 0.15s;
+  border-radius: 20px; font-size: 12px; font-weight: 500;
+  color: var(--gray-600); background: white; transition: all 0.15s;
 }
 .border-style-btn:hover { border-color: var(--navy); color: var(--navy); }
 .border-style-btn.active { background: var(--navy); border-color: var(--navy); color: white; }
 
 /* Preview */
-.editor-preview-panel {
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-}
+.editor-preview-panel { display: flex; flex-direction: column; min-height: 0; }
 
 .preview-label {
   display: flex; align-items: center; gap: 6px;
-  font-size: 12px; font-weight: 600;
-  color: var(--gray-500);
-  letter-spacing: 1px;
-  text-transform: uppercase;
-  margin-bottom: 10px;
+  font-size: 12px; font-weight: 600; color: var(--gray-500);
+  letter-spacing: 1px; text-transform: uppercase; margin-bottom: 10px;
 }
 .preview-loading { color: var(--gold); font-style: italic; }
 
 .preview-frame-wrapper {
   flex: 1;
-  background: white;
-  border: 1px solid var(--gray-200);
-  border-radius: 14px;
-  overflow: hidden;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  background: white; border: 1px solid var(--gray-200);
+  border-radius: 14px; overflow: hidden;
+  display: flex; align-items: center; justify-content: center;
   min-height: 500px;
 }
 
-.preview-iframe {
-  width: 100%; height: 100%;
-  border: none;
-  transform-origin: top left;
+.preview-iframe { width: 100%; height: 100%; border: none; transform-origin: top left; }
+
+.preview-placeholder { display: flex; flex-direction: column; align-items: center; gap: 16px; color: var(--gray-400); }
+
+/* ════════════════════════════════
+   RESPONSIVE
+════════════════════════════════ */
+
+@media (max-width: 1024px) {
+  .editor-layout { grid-template-columns: 280px 1fr; gap: 14px; }
 }
 
-.preview-placeholder {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 16px;
-  color: var(--gray-400);
+@media (max-width: 768px) {
+  /* Stack controls above preview */
+  .editor-page { height: auto; }
+  .editor-layout {
+    grid-template-columns: 1fr;
+    flex: none;
+  }
+  .editor-controls {
+    overflow-y: visible;
+    max-height: none;
+    padding-right: 0;
+  }
+  .preview-frame-wrapper { min-height: 300px; }
+  .editor-topbar { gap: 8px; }
+  .editor-title { font-size: 16px; }
+  .two-col { grid-template-columns: 1fr; }
+  /* Collapse preview panel to fixed height on mobile */
+  .editor-preview-panel { order: -1; }
+  .preview-frame-wrapper { height: 220px; min-height: 220px; }
+}
+
+@media (max-width: 480px) {
+  .editor-topbar { flex-wrap: wrap; }
+  .editor-actions { width: 100%; }
+  .preview-btn, .save-btn { flex: 1; justify-content: center; }
+  .controls-section { padding: 14px; }
 }

@@ -1,5 +1,6 @@
+import { useState, useEffect } from 'react'
 import { Outlet, NavLink, useLocation } from 'react-router-dom'
-import { Award, LayoutTemplate, FileText, Users, Clock, Home, ChevronRight } from 'lucide-react'
+import { Award, LayoutTemplate, FileText, Users, Clock, Home, ChevronRight, Menu, X } from 'lucide-react'
 import './Layout.css'
 
 const navItems = [
@@ -12,6 +13,16 @@ const navItems = [
 
 export default function Layout() {
   const location = useLocation()
+  const [sidebarOpen, setSidebarOpen] = useState(false)
+
+  // Close sidebar on route change
+  useEffect(() => { setSidebarOpen(false) }, [location.pathname])
+
+  // Prevent body scroll when sidebar open on mobile
+  useEffect(() => {
+    document.body.style.overflow = sidebarOpen ? 'hidden' : ''
+    return () => { document.body.style.overflow = '' }
+  }, [sidebarOpen])
 
   const crumbs = () => {
     const parts = location.pathname.split('/').filter(Boolean)
@@ -24,14 +35,23 @@ export default function Layout() {
 
   return (
     <div className="layout">
+      {/* Mobile overlay */}
+      <div
+        className={`sidebar-overlay ${sidebarOpen ? 'open' : ''}`}
+        onClick={() => setSidebarOpen(false)}
+      />
+
       {/* Sidebar */}
-      <aside className="sidebar">
+      <aside className={`sidebar ${sidebarOpen ? 'open' : ''}`}>
         <div className="sidebar-brand">
           <Award size={28} className="brand-icon" />
           <div>
             <div className="brand-name">CertForge</div>
             <div className="brand-sub">Admin Panel</div>
           </div>
+          <button className="sidebar-close" onClick={() => setSidebarOpen(false)}>
+            <X size={18} />
+          </button>
         </div>
 
         <nav className="sidebar-nav">
@@ -57,6 +77,11 @@ export default function Layout() {
       {/* Main */}
       <div className="main-wrapper">
         <header className="topbar">
+          {/* Hamburger — visible on mobile only */}
+          <button className="menu-btn" onClick={() => setSidebarOpen(true)} aria-label="Open menu">
+            <Menu size={22} />
+          </button>
+
           <div className="breadcrumb">
             {crumbs().map((c, i) => (
               <span key={i} className="breadcrumb-item">
@@ -65,6 +90,7 @@ export default function Layout() {
               </span>
             ))}
           </div>
+
           <div className="topbar-right">
             <div className="admin-badge">Admin</div>
           </div>

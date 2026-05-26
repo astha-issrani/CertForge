@@ -9,7 +9,6 @@
   position: relative;
   overflow: hidden;
 }
-
 .dash-hero::before {
   content: '';
   position: absolute;
@@ -64,7 +63,7 @@
   z-index: 1;
 }
 
-.dash-actions { display: flex; gap: 14px; position: relative; z-index: 1; }
+.dash-actions { display: flex; gap: 14px; position: relative; z-index: 1; flex-wrap: wrap; }
 
 .btn-primary {
   display: inline-flex;
@@ -123,27 +122,9 @@
   margin-bottom: 18px;
 }
 
-.feature-title {
-  font-size: 18px;
-  font-weight: 600;
-  margin-bottom: 10px;
-  color: var(--gray-800);
-}
-
-.feature-desc {
-  font-size: 14px;
-  color: var(--gray-500);
-  line-height: 1.65;
-  margin-bottom: 20px;
-}
-
-.feature-action {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 14px;
-  font-weight: 600;
-}
+.feature-title { font-size: 18px; font-weight: 600; margin-bottom: 10px; color: var(--gray-800); }
+.feature-desc { font-size: 14px; color: var(--gray-500); line-height: 1.65; margin-bottom: 20px; }
+.feature-action { display: flex; align-items: center; gap: 6px; font-size: 14px; font-weight: 600; }
 
 /* CSV Info */
 .dash-csv-info {
@@ -165,12 +146,7 @@
 
 .csv-info-icon { font-size: 36px; line-height: 1; }
 
-.csv-info-content h3 {
-  font-size: 17px;
-  margin-bottom: 8px;
-  color: var(--gray-800);
-}
-
+.csv-info-content h3 { font-size: 17px; margin-bottom: 8px; color: var(--gray-800); }
 .csv-info-content p { font-size: 14px; color: var(--gray-600); }
 .csv-info-content code {
   background: var(--gray-100);
@@ -182,16 +158,7 @@
 }
 
 .csv-sample { flex: 1; }
-
-.csv-header {
-  font-size: 12px;
-  font-weight: 600;
-  letter-spacing: 1px;
-  text-transform: uppercase;
-  color: var(--gray-400);
-  margin-bottom: 8px;
-}
-
+.csv-header { font-size: 12px; font-weight: 600; letter-spacing: 1px; text-transform: uppercase; color: var(--gray-400); margin-bottom: 8px; }
 .csv-code {
   display: block;
   background: var(--gray-900);
@@ -202,4 +169,35 @@
   padding: 16px 20px;
   border-radius: 10px;
   white-space: pre;
+  overflow-x: auto;
+}
+
+/* ════════════════════════════════
+   RESPONSIVE
+════════════════════════════════ */
+
+@media (max-width: 1024px) {
+  .dash-hero { padding: 40px 40px; }
+  .dash-hero-title { font-size: 36px; }
+  .dash-features { grid-template-columns: repeat(2, 1fr); }
+  .dash-csv-info { flex-direction: column; gap: 24px; }
+}
+
+@media (max-width: 768px) {
+  .dash-hero { padding: 28px 24px; border-radius: 12px; }
+  .dash-hero-title { font-size: 28px; }
+  .dash-hero-sub { font-size: 15px; margin-bottom: 24px; }
+  .dash-actions { flex-direction: column; }
+  .btn-primary, .btn-secondary { width: 100%; justify-content: center; }
+  .dash-features { grid-template-columns: 1fr; gap: 14px; margin-bottom: 24px; }
+  .feature-card { padding: 20px; }
+  .dash-csv-info { padding: 20px; gap: 20px; }
+  .csv-info-content { flex-direction: column; gap: 12px; }
+  .csv-code { font-size: 11px; padding: 12px; }
+}
+
+@media (max-width: 480px) {
+  .dash-hero { padding: 20px 16px; }
+  .dash-hero-title { font-size: 24px; }
+  .dash-hero-badge { font-size: 10px; padding: 4px 10px; }
 }

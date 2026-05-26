@@ -4,7 +4,18 @@
   background: var(--gray-50);
 }
 
-/* Sidebar */
+/* ── Overlay (mobile only) ── */
+.sidebar-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.5);
+  z-index: 99;
+  backdrop-filter: blur(2px);
+}
+.sidebar-overlay.open { display: block; }
+
+/* ── Sidebar ── */
 .sidebar {
   width: var(--sidebar-width);
   background: var(--navy);
@@ -16,16 +27,15 @@
   height: 100vh;
   z-index: 100;
   overflow: hidden;
+  transition: transform 0.3s ease;
 }
 
 .sidebar::before {
   content: '';
   position: absolute;
-  top: -60px;
-  right: -60px;
-  width: 200px;
-  height: 200px;
-  background: rgba(201, 168, 76, 0.08);
+  top: -60px; right: -60px;
+  width: 200px; height: 200px;
+  background: rgba(201,168,76,0.08);
   border-radius: 50%;
   pointer-events: none;
 }
@@ -36,6 +46,22 @@
   gap: 12px;
   padding: 24px 20px;
   border-bottom: 1px solid rgba(255,255,255,0.08);
+}
+
+/* Close button — mobile only */
+.sidebar-close {
+  display: none;
+  margin-left: auto;
+  background: rgba(255,255,255,0.1);
+  border: none;
+  color: white;
+  border-radius: 6px;
+  width: 30px; height: 30px;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 18px;
+  line-height: 1;
 }
 
 .brand-icon { color: var(--gold); flex-shrink: 0; }
@@ -77,25 +103,14 @@
   transition: all 0.2s;
   position: relative;
 }
-
-.nav-item:hover {
-  background: rgba(255,255,255,0.08);
-  color: rgba(255,255,255,0.9);
-}
-
-.nav-item.active {
-  background: rgba(201,168,76,0.15);
-  color: var(--gold-light);
-}
-
+.nav-item:hover { background: rgba(255,255,255,0.08); color: rgba(255,255,255,0.9); }
+.nav-item.active { background: rgba(201,168,76,0.15); color: var(--gold-light); }
 .nav-item.active::before {
   content: '';
   position: absolute;
-  left: 0;
-  top: 50%;
+  left: 0; top: 50%;
   transform: translateY(-50%);
-  width: 3px;
-  height: 20px;
+  width: 3px; height: 20px;
   background: var(--gold);
   border-radius: 0 2px 2px 0;
 }
@@ -104,22 +119,19 @@
   padding: 16px 20px;
   border-top: 1px solid rgba(255,255,255,0.08);
 }
+.sidebar-version { font-size: 11px; color: rgba(255,255,255,0.3); letter-spacing: 0.5px; }
 
-.sidebar-version {
-  font-size: 11px;
-  color: rgba(255,255,255,0.3);
-  letter-spacing: 0.5px;
-}
-
-/* Main */
+/* ── Main wrapper ── */
 .main-wrapper {
   margin-left: var(--sidebar-width);
   flex: 1;
   display: flex;
   flex-direction: column;
   min-height: 100vh;
+  min-width: 0;
 }
 
+/* ── Topbar ── */
 .topbar {
   height: var(--header-height);
   background: var(--white);
@@ -131,6 +143,18 @@
   position: sticky;
   top: 0;
   z-index: 50;
+  gap: 12px;
+}
+
+/* Hamburger — hidden on desktop */
+.menu-btn {
+  display: none;
+  background: none;
+  border: none;
+  color: var(--gray-600);
+  cursor: pointer;
+  padding: 4px;
+  flex-shrink: 0;
 }
 
 .breadcrumb {
@@ -139,12 +163,20 @@
   gap: 6px;
   font-size: 13px;
   color: var(--gray-500);
+  min-width: 0;
+  overflow: hidden;
 }
+.breadcrumb-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.breadcrumb-sep { color: var(--gray-300); flex-shrink: 0; }
 
-.breadcrumb-item { display: flex; align-items: center; gap: 6px; }
-.breadcrumb-sep { color: var(--gray-300); }
-
-.topbar-right { display: flex; align-items: center; gap: 12px; }
+.topbar-right { display: flex; align-items: center; gap: 12px; flex-shrink: 0; }
 
 .admin-badge {
   background: linear-gradient(135deg, var(--navy), #2a5298);
@@ -155,10 +187,55 @@
   border-radius: 20px;
   letter-spacing: 1px;
   text-transform: uppercase;
+  white-space: nowrap;
 }
 
+/* ── Page content ── */
 .page-content {
   flex: 1;
   padding: 32px;
   animation: fadeIn 0.3s ease;
+}
+
+/* ════════════════════════════════
+   RESPONSIVE BREAKPOINTS
+════════════════════════════════ */
+
+/* Tablet (≤1024px) */
+@media (max-width: 1024px) {
+  :root { --sidebar-width: 220px; }
+  .page-content { padding: 24px; }
+  .topbar { padding: 0 24px; }
+}
+
+/* Mobile (≤768px) — sidebar becomes a drawer */
+@media (max-width: 768px) {
+  .sidebar {
+    transform: translateX(-100%);
+    width: 260px;
+  }
+  .sidebar.open {
+    transform: translateX(0);
+    box-shadow: 4px 0 24px rgba(0,0,0,0.3);
+  }
+  .sidebar-close { display: flex; }
+
+  .main-wrapper { margin-left: 0; }
+
+  .menu-btn { display: flex; }
+
+  .topbar { padding: 0 16px; }
+
+  .page-content { padding: 16px; }
+
+  .admin-badge { display: none; }
+
+  /* Hide all but last breadcrumb on very small screens */
+  .breadcrumb-item:not(:last-child) { display: none; }
+  .breadcrumb-sep { display: none; }
+}
+
+/* Small mobile (≤480px) */
+@media (max-width: 480px) {
+  .page-content { padding: 12px; }
 }

@@ -37,7 +37,6 @@
   margin-bottom: 8px;
   text-transform: uppercase;
 }
-
 .optional { font-weight: 400; color: var(--gray-400); text-transform: none; letter-spacing: 0; }
 
 .gen-input {
@@ -53,11 +52,7 @@
 .gen-input:focus { border-color: var(--navy); background: white; box-shadow: 0 0 0 3px rgba(26,58,108,0.08); }
 .gen-input::placeholder { color: var(--gray-400); }
 
-.gen-textarea {
-  min-height: 90px;
-  resize: vertical;
-  line-height: 1.5;
-}
+.gen-textarea { min-height: 90px; resize: vertical; line-height: 1.5; }
 
 .select-wrapper { position: relative; }
 .gen-select {
@@ -105,9 +100,10 @@
   align-items: center;
   gap: 12px;
   animation: fadeIn 0.3s ease;
+  flex-wrap: wrap;
 }
 .result-icon { font-size: 24px; }
-.result-info { flex: 1; }
+.result-info { flex: 1; min-width: 0; }
 .result-title { font-size: 14px; font-weight: 700; color: #166534; }
 .result-sub { font-size: 12px; color: #166534; opacity: 0.7; }
 .result-download {
@@ -119,12 +115,11 @@
   padding: 8px 16px;
   border-radius: 8px;
   transition: all 0.15s;
+  white-space: nowrap;
 }
 .result-download:hover { background: #059669; }
 
 /* Preview */
-.gen-preview { }
-
 .gen-preview-label {
   display: flex; align-items: center; gap: 8px;
   font-size: 12px; font-weight: 700;
@@ -133,7 +128,6 @@
   text-transform: uppercase;
   margin-bottom: 12px;
 }
-
 .prev-dot {
   width: 8px; height: 8px;
   background: var(--gold);
@@ -151,12 +145,7 @@
   align-items: center;
   justify-content: center;
 }
-
-.gen-iframe {
-  width: 100%;
-  height: 560px;
-  border: none;
-}
+.gen-iframe { width: 100%; height: 560px; border: none; }
 
 .gen-preview-empty {
   display: flex;
@@ -166,8 +155,25 @@
   color: var(--gray-300);
   text-align: center;
 }
-.gen-preview-empty p {
-  font-size: 14px;
-  max-width: 260px;
-  line-height: 1.6;
+.gen-preview-empty p { font-size: 14px; max-width: 260px; line-height: 1.6; }
+
+/* ════════════════════════════════
+   RESPONSIVE
+════════════════════════════════ */
+
+@media (max-width: 1024px) {
+  .gen-layout { grid-template-columns: 320px 1fr; gap: 16px; }
+}
+
+@media (max-width: 768px) {
+  .gen-layout { grid-template-columns: 1fr; }
+  .gen-form { position: static; }
+  .gen-row { grid-template-columns: 1fr; }
+  .gen-preview-frame { min-height: 280px; }
+  .gen-iframe { height: 280px; }
+}
+
+@media (max-width: 480px) {
+  .gen-form { padding: 18px; }
+  .gen-form-header h2 { font-size: 17px; }
 }

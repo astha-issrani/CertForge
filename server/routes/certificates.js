@@ -6,10 +6,10 @@ const { v4: uuidv4 } = require('uuid');
 const { generateCertificateHTML, generatePersevexHTML, generateCustomHTML } = require('../utils/generateHTML');
 const { PREBUILT_TEMPLATES } = require('../data/prebuiltTemplates');
 
-let Template, Certificate, puppeteer;
+let Template, Certificate, htmlPdf;
 try { Template = require('../models/Template'); } catch (e) {}
 try { Certificate = require('../models/Certificate'); } catch (e) {}
-try { puppeteer = require('puppeteer'); } catch (e) { console.log('Puppeteer not available'); }
+try { htmlPdf = require('html-pdf-node'); } catch (e) { console.log('html-pdf-node not available'); }
 
 async function getTemplate(id) {
   const prebuilt = PREBUILT_TEMPLATES.find(t => t._id === id);
@@ -65,27 +65,22 @@ router.post('/generate', async (req, res) => {
 
     const filename = `cert_${(recipientName || 'cert').replace(/\s+/g, '_')}_${uuidv4().slice(0,8)}.pdf`;
 
-    if (!puppeteer) {
+    if (!htmlPdf) {
+      // Fallback: return HTML
       const filePath = path.join(__dirname, '../output', filename.replace('.pdf', '.html'));
       fs.writeFileSync(filePath, html);
-      return res.json({ success: true, url: `/output/${filename.replace('.pdf','.html')}`, type: 'html' });
+      return res.json({ success: true, url: `/output/${filename.replace('.pdf', '.html')}`, type: 'html' });
     }
 
-    const browser = await puppeteer.launch({
-      headless: 'new',
-      executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || null,
-      args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage']
-    });
-    const page = await browser.newPage();
-    await page.setContent(html, { waitUntil: 'networkidle0' });
-    await page.setViewport({ width: 1122, height: 794 });
-
-    const pdfBuffer = await page.pdf({
+    const options = {
+      format: null,
       width: '1122px',
       height: '794px',
-      printBackground: true
-    });
-    await browser.close();
+      printBackground: true,
+      margin: { top: '0px', bottom: '0px', left: '0px', right: '0px' }
+    }
+    const file = { content: html }
+    const pdfBuffer = await htmlPdf.generatePdf(file, options)
 
     if (Certificate) {
       const mongoose = require('mongoose');

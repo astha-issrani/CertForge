@@ -8,10 +8,10 @@ const { v4: uuidv4 } = require('uuid');
 const { generateCertificateHTML, generatePersevexHTML, generateCustomHTML } = require('../utils/generateHTML');
 const { PREBUILT_TEMPLATES } = require('../data/prebuiltTemplates');
 
-let Template, Certificate, puppeteer, archiver;
+let Template, Certificate, htmlPdf, archiver;
 try { Template = require('../models/Template'); } catch (e) {}
 try { Certificate = require('../models/Certificate'); } catch (e) {}
-try { puppeteer = require('puppeteer'); } catch (e) {}
+try { htmlPdf = require('html-pdf-node'); } catch (e) { console.log('html-pdf-node not available'); }
 try { archiver = require('archiver'); } catch (e) {}
 
 const upload = multer({ dest: path.join(__dirname, '../uploads/') });
@@ -23,26 +23,13 @@ async function getTemplate(id) {
   return null;
 }
 
-// POST /api/bulk/generate - CSV upload + bulk generate
-router.post('/generate', upload.single('csvFile'), async (req, res) => {
-  try {
-    const { templateId, templateOverride } = req.body;
-    if (!req.file) return res.status(400).json({ error: 'No CSV file uploaded' });
+function buildHTML(template, data) {
+  if (template._id === 'prebuilt-6') return generatePersevexHTML(data);
+  if (template.isCustom) return generateCustomHTML(template, data);
+  return generateCertificateHTML(template, data);
+}
 
-    let template = templateOverride ? JSON.parse(templateOverride) : await getTemplate(templateId);
-    if (!template) return res.status(404).json({ error: 'Template not found' });
-
-    const fileContent = fs.readFileSync(req.file.path, 'utf-8');
-    const records = csv.parse(fileContent, {
-      columns: true,
-      skip_empty_lines: true,
-      trim: true
-    });
-
-    if (!records.length) return res.status(400).json({ error: 'CSV file is empty' });
-
-    // Normalize column names (case-insensitive)
-    const COURSE_DESCRIPTIONS = {
+const COURSE_DESCRIPTIONS = {
   'web development': 'This is to certify that the candidate has successfully completed the Web Development course at Persevex, demonstrating strong commitment and competence throughout the program.',
   'data science': 'This is to certify that the candidate has successfully completed the Data Science course at Persevex, demonstrating analytical skills and dedication throughout the program.',
   'machine learning': 'This is to certify that the candidate has successfully completed the Machine Learning course at Persevex, showcasing technical excellence and problem-solving ability.',
@@ -58,12 +45,12 @@ const normalize = (row) => {
 
   const firstName = lower['first name'] || lower['firstname'] || '';
   const lastName = lower['last name'] || lower['lastname'] || '';
-  const fullName = lower['name'] || lower['full name'] || 
+  const fullName = lower['name'] || lower['full name'] ||
     (firstName + ' ' + lastName).trim() || 'Unknown';
 
   const courseName = lower['course name'] || lower['coursename'] || lower['course'] || '';
   const courseKey = courseName.toLowerCase().trim();
-  const autoDescription = COURSE_DESCRIPTIONS[courseKey] || 
+  const autoDescription = COURSE_DESCRIPTIONS[courseKey] ||
     `This is to certify that the candidate has successfully completed the ${courseName} course at Persevex, demonstrating strong commitment and competence throughout the program.`;
 
   return {
@@ -78,6 +65,27 @@ const normalize = (row) => {
   };
 };
 
+const PDF_OPTIONS = {
+  format: null,
+  width: '1122px',
+  height: '794px',
+  printBackground: true,
+  margin: { top: '0px', bottom: '0px', left: '0px', right: '0px' }
+};
+
+// POST /api/bulk/generate
+router.post('/generate', upload.single('csvFile'), async (req, res) => {
+  try {
+    const { templateId, templateOverride } = req.body;
+    if (!req.file) return res.status(400).json({ error: 'No CSV file uploaded' });
+
+    let template = templateOverride ? JSON.parse(templateOverride) : await getTemplate(templateId);
+    if (!template) return res.status(404).json({ error: 'Template not found' });
+
+    const fileContent = fs.readFileSync(req.file.path, 'utf-8');
+    const records = csv.parse(fileContent, { columns: true, skip_empty_lines: true, trim: true });
+    if (!records.length) return res.status(400).json({ error: 'CSV file is empty' });
+
     const batchId = uuidv4();
     const outputDir = path.join(__dirname, '../output', batchId);
     fs.mkdirSync(outputDir, { recursive: true });
@@ -85,74 +93,53 @@ const normalize = (row) => {
     const results = [];
     const errors = [];
 
-    if (puppeteer) {
-      const browser = await puppeteer.launch({
-  headless: 'new',
-  executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || null,
-  args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage']
-});
-      
+    if (htmlPdf) {
       for (let i = 0; i < records.length; i++) {
         const data = normalize(records[i]);
         try {
-         const html = template._id === 'prebuilt-6'
-  ? generatePersevexHTML(data)
-  : generateCertificateHTML(template, data);
-          const page = await browser.newPage();
-          await page.setContent(html, { waitUntil: 'networkidle0' });
-          await page.setViewport({ width: 1122, height: 794 });
-          
+          const html = buildHTML(template, data);
           const filename = `cert_${data.recipientName.replace(/\s+/g, '_')}_${i + 1}.pdf`;
           const filePath = path.join(outputDir, filename);
-          await page.pdf({ path: filePath, width: '1122px', height: '794px', printBackground: true });
-          await page.close();
+
+          const pdfBuffer = await htmlPdf.generatePdf({ content: html }, PDF_OPTIONS);
+          fs.writeFileSync(filePath, pdfBuffer);
 
           if (Certificate) {
-  const mongoose = require('mongoose');
-  const isValidObjectId = mongoose.Types.ObjectId.isValid(templateId);
-  
-  const cert = new Certificate({
-    ...data,
-    templateId: isValidObjectId ? templateId : null,
-    prebuiltTemplateId: !isValidObjectId ? templateId : null,
-    pdfPath: filePath,
-    batchId
-  });
-  await cert.save();
-}
+            const mongoose = require('mongoose');
+            const isValidObjectId = mongoose.Types.ObjectId.isValid(templateId);
+            const cert = new Certificate({
+              ...data,
+              templateId: isValidObjectId ? templateId : null,
+              prebuiltTemplateId: !isValidObjectId ? templateId : null,
+              pdfPath: filePath,
+              batchId
+            });
+            await cert.save();
+          }
           results.push({ name: data.recipientName, filename, status: 'success' });
         } catch (e) {
-          errors.push({ name: data.recipientName || `Row ${i+1}`, error: e.message });
+          errors.push({ name: data.recipientName || `Row ${i + 1}`, error: e.message });
         }
       }
-      await browser.close();
 
-      // Create ZIP
-      if (archiver) {
+      // Create ZIP and stream directly — no file persistence needed
+      if (archiver && results.length > 0) {
         const zipFilename = `batch_${batchId}.zip`;
-        const zipPath = path.join(__dirname, '../output', zipFilename);
-        const output = fs.createWriteStream(zipPath);
-        const archive = archiver('zip', { zlib: { level: 9 } });
-        
-        await new Promise((resolve, reject) => {
-          archive.on('error', reject);
-          output.on('close', resolve);
-          archive.pipe(output);
-          archive.directory(outputDir, false);
-          archive.finalize();
-        });
+        res.setHeader('Content-Type', 'application/zip');
+        res.setHeader('Content-Disposition', `attachment; filename="${zipFilename}"`);
 
-        fs.unlinkSync(req.file.path);
-        return res.json({
-          success: true,
-          batchId,
-          total: records.length,
-          generated: results.length,
-          errors,
-          results,
-          zipUrl: `/output/${zipFilename}`,
-          type: 'pdf'
+        const archive = archiver('zip', { zlib: { level: 6 } });
+        archive.on('error', err => { throw err; });
+        archive.pipe(res);
+        archive.directory(outputDir, false);
+        await archive.finalize();
+
+        // cleanup after stream
+        res.on('finish', () => {
+          try { fs.rmSync(outputDir, { recursive: true, force: true }); } catch (e) {}
+          try { fs.unlinkSync(req.file.path); } catch (e) {}
         });
+        return;
       }
     }
 
@@ -160,28 +147,18 @@ const normalize = (row) => {
     for (let i = 0; i < records.length; i++) {
       const data = normalize(records[i]);
       try {
-       const html = template._id === 'prebuilt-6'
-  ? generatePersevexHTML(data)
-  : generateCertificateHTML(template, data);
+        const html = buildHTML(template, data);
         const filename = `cert_${data.recipientName.replace(/\s+/g, '_')}_${i + 1}.html`;
         const filePath = path.join(outputDir, filename);
         fs.writeFileSync(filePath, html);
         results.push({ name: data.recipientName, filename, url: `/output/${batchId}/${filename}`, status: 'success' });
       } catch (e) {
-        errors.push({ name: data.recipientName || `Row ${i+1}`, error: e.message });
+        errors.push({ name: data.recipientName || `Row ${i + 1}`, error: e.message });
       }
     }
 
-    fs.unlinkSync(req.file.path);
-    res.json({
-      success: true,
-      batchId,
-      total: records.length,
-      generated: results.length,
-      errors,
-      results,
-      type: 'html'
-    });
+    try { fs.unlinkSync(req.file.path); } catch (e) {}
+    res.json({ success: true, batchId, total: records.length, generated: results.length, errors, results, type: 'html' });
 
   } catch (err) {
     console.error('Bulk generation error:', err);
@@ -189,7 +166,7 @@ const normalize = (row) => {
   }
 });
 
-// GET /api/bulk/preview-csv - parse CSV and return data preview
+// POST /api/bulk/preview-csv
 router.post('/preview-csv', upload.single('csvFile'), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ error: 'No file uploaded' });

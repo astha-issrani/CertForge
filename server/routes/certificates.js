@@ -12,9 +12,21 @@ try { Certificate = require('../models/Certificate'); } catch (e) {}
 try { htmlPdf = require('html-pdf-node'); } catch (e) { console.log('html-pdf-node not available'); }
 
 async function getTemplate(id) {
+  // Check prebuilt first (string IDs like 'prebuilt-1')
   const prebuilt = PREBUILT_TEMPLATES.find(t => t._id === id);
   if (prebuilt) return prebuilt;
-  if (Template) return await Template.findById(id);
+
+  if (Template) {
+    // Guard against invalid ObjectId — mongoose throws CastError otherwise
+    const mongoose = require('mongoose');
+    if (!mongoose.Types.ObjectId.isValid(id)) return null;
+    try {
+      return await Template.findById(id);
+    } catch (err) {
+      console.error('getTemplate error:', err.message);
+      return null;
+    }
+  }
   return null;
 }
 

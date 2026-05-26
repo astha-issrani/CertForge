@@ -39,8 +39,16 @@ function buildHTML(template, data) {
 // POST /api/certificates/preview
 router.post('/preview', async (req, res) => {
   try {
-    const { templateId, recipientName, dateFrom, dateTo, customBody } = req.body;
-    let template = await getTemplate(templateId);
+    const { templateId, templateOverride, recipientName, dateFrom, dateTo, customBody } = req.body;
+
+    // ✅ Use templateOverride directly if provided (from TemplateEditor live preview)
+    let template = templateOverride || null;
+
+    // Only look up by ID if no override was provided
+    if (!template && templateId) {
+      template = await getTemplate(templateId);
+    }
+
     if (!template) return res.status(404).json({ error: 'Template not found' });
 
     const html = buildHTML(template, {

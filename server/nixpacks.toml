@@ -1,11 +1,16 @@
 [phases.setup]
 nixPkgs = [
+  "nodejs_20",
   "chromium",
   "nss",
   "freetype",
   "harfbuzz",
-  "ca-certificates",
-  "ttf-dejavu"
+  "cacert",
+  "dejavu_fonts",
+  "glib",
+  "expat",
+  "libdrm",
+  "mesa"
 ]
 
 [phases.install]

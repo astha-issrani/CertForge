@@ -19,7 +19,11 @@ const upload = multer({ dest: path.join(__dirname, '../uploads/') });
 async function getTemplate(id) {
   const prebuilt = PREBUILT_TEMPLATES.find(t => t._id === id);
   if (prebuilt) return prebuilt;
-  if (Template) return await Template.findById(id);
+  if (Template) {
+    const mongoose = require('mongoose');
+    if (!mongoose.Types.ObjectId.isValid(id)) return null;
+    try { return await Template.findById(id); } catch (e) { return null; }
+  }
   return null;
 }
 
@@ -44,12 +48,12 @@ const normalize = (row) => {
   for (const [k, v] of Object.entries(row)) lower[k.toLowerCase().trim()] = v;
 
   const firstName = lower['first name'] || lower['firstname'] || '';
-  const lastName = lower['last name'] || lower['lastname'] || '';
-  const fullName = lower['name'] || lower['full name'] ||
+  const lastName  = lower['last name']  || lower['lastname']  || '';
+  const fullName  = lower['name'] || lower['full name'] ||
     (firstName + ' ' + lastName).trim() || 'Unknown';
 
   const courseName = lower['course name'] || lower['coursename'] || lower['course'] || '';
-  const courseKey = courseName.toLowerCase().trim();
+  const courseKey  = courseName.toLowerCase().trim();
   const autoDescription = COURSE_DESCRIPTIONS[courseKey] ||
     `This is to certify that the candidate has successfully completed the ${courseName} course at Persevex, demonstrating strong commitment and competence throughout the program.`;
 
@@ -57,10 +61,10 @@ const normalize = (row) => {
     recipientName: fullName,
     firstName,
     lastName,
-    usnId: lower['usn id'] || lower['usnid'] || lower['usn'] || '',
+    usnId:      lower['usn id'] || lower['usnid'] || lower['usn'] || '',
     courseName,
-    dateFrom: lower['datefrom'] || lower['date from'] || lower['from'] || lower['start date'] || '',
-    dateTo: lower['dateto'] || lower['date to'] || lower['to'] || lower['end date'] || '',
+    dateFrom:   lower['datefrom'] || lower['date from'] || lower['from'] || lower['start date'] || '',
+    dateTo:     lower['dateto']   || lower['date to']   || lower['to']   || lower['end date']   || '',
     customBody: lower['body'] || lower['description'] || lower['custombody'] || autoDescription
   };
 };
@@ -70,7 +74,16 @@ const PDF_OPTIONS = {
   width: '1122px',
   height: '794px',
   printBackground: true,
-  margin: { top: '0px', bottom: '0px', left: '0px', right: '0px' }
+  margin: { top: '0px', bottom: '0px', left: '0px', right: '0px' },
+  args: [
+    '--no-sandbox',
+    '--disable-setuid-sandbox',
+    '--disable-dev-shm-usage',
+    '--disable-gpu',
+    '--no-first-run',
+    '--no-zygote',
+    '--single-process',
+  ]
 };
 
 // POST /api/bulk/generate
@@ -86,18 +99,18 @@ router.post('/generate', upload.single('csvFile'), async (req, res) => {
     const records = csv.parse(fileContent, { columns: true, skip_empty_lines: true, trim: true });
     if (!records.length) return res.status(400).json({ error: 'CSV file is empty' });
 
-    const batchId = uuidv4();
+    const batchId  = uuidv4();
     const outputDir = path.join(__dirname, '../output', batchId);
     fs.mkdirSync(outputDir, { recursive: true });
 
     const results = [];
-    const errors = [];
+    const errors  = [];
 
     if (htmlPdf) {
       for (let i = 0; i < records.length; i++) {
         const data = normalize(records[i]);
         try {
-          const html = buildHTML(template, data);
+          const html     = buildHTML(template, data);
           const filename = `cert_${data.recipientName.replace(/\s+/g, '_')}_${i + 1}.pdf`;
           const filePath = path.join(outputDir, filename);
 
@@ -109,7 +122,7 @@ router.post('/generate', upload.single('csvFile'), async (req, res) => {
             const isValidObjectId = mongoose.Types.ObjectId.isValid(templateId);
             const cert = new Certificate({
               ...data,
-              templateId: isValidObjectId ? templateId : null,
+              templateId:         isValidObjectId ? templateId : null,
               prebuiltTemplateId: !isValidObjectId ? templateId : null,
               pdfPath: filePath,
               batchId
@@ -122,7 +135,7 @@ router.post('/generate', upload.single('csvFile'), async (req, res) => {
         }
       }
 
-      // Create ZIP and stream directly — no file persistence needed
+      // Stream ZIP directly — no persistent storage needed
       if (archiver && results.length > 0) {
         const zipFilename = `batch_${batchId}.zip`;
         res.setHeader('Content-Type', 'application/zip');
@@ -134,7 +147,6 @@ router.post('/generate', upload.single('csvFile'), async (req, res) => {
         archive.directory(outputDir, false);
         await archive.finalize();
 
-        // cleanup after stream
         res.on('finish', () => {
           try { fs.rmSync(outputDir, { recursive: true, force: true }); } catch (e) {}
           try { fs.unlinkSync(req.file.path); } catch (e) {}
@@ -143,11 +155,11 @@ router.post('/generate', upload.single('csvFile'), async (req, res) => {
       }
     }
 
-    // Fallback: generate HTML files
+    // Fallback: HTML files
     for (let i = 0; i < records.length; i++) {
       const data = normalize(records[i]);
       try {
-        const html = buildHTML(template, data);
+        const html     = buildHTML(template, data);
         const filename = `cert_${data.recipientName.replace(/\s+/g, '_')}_${i + 1}.html`;
         const filePath = path.join(outputDir, filename);
         fs.writeFileSync(filePath, html);
@@ -158,7 +170,11 @@ router.post('/generate', upload.single('csvFile'), async (req, res) => {
     }
 
     try { fs.unlinkSync(req.file.path); } catch (e) {}
-    res.json({ success: true, batchId, total: records.length, generated: results.length, errors, results, type: 'html' });
+    res.json({
+      success: true, batchId,
+      total: records.length, generated: results.length,
+      errors, results, type: 'html'
+    });
 
   } catch (err) {
     console.error('Bulk generation error:', err);
@@ -172,14 +188,18 @@ router.post('/preview-csv', upload.single('csvFile'), async (req, res) => {
     if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
     const fileContent = fs.readFileSync(req.file.path, 'utf-8');
     const records = csv.parse(fileContent, { columns: true, skip_empty_lines: true, trim: true });
-    fs.unlinkSync(req.file.path);
-    res.json({ columns: Object.keys(records[0] || {}), rows: records.slice(0, 5), total: records.length });
+    try { fs.unlinkSync(req.file.path); } catch (e) {}
+    res.json({
+      columns: Object.keys(records[0] || {}),
+      rows: records.slice(0, 5),
+      total: records.length
+    });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-// POST /api/bulk/generate-html - returns HTML for each certificate
+// POST /api/bulk/generate-html — returns HTML for client-side PDF printing
 router.post('/generate-html', upload.single('csvFile'), async (req, res) => {
   try {
     const { templateId, templateOverride } = req.body;
@@ -198,9 +218,9 @@ router.post('/generate-html', upload.single('csvFile'), async (req, res) => {
       const data = normalize(row);
       try {
         const html = buildHTML(template, data);
-        return { name: data.recipientName, html, index: i }
+        return { name: data.recipientName, html, index: i };
       } catch (e) {
-        return { name: data.recipientName || `Row ${i+1}`, html: null, error: e.message }
+        return { name: data.recipientName || `Row ${i + 1}`, html: null, error: e.message };
       }
     }).filter(item => item.html);
 

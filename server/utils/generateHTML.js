@@ -15,26 +15,22 @@ function getPersevexImages() {
 function generatePersevexHTML(data) {
   const { logo, seal, sig } = getPersevexImages();
   const { recipientName, courseName, usnId, dateFrom, dateTo, customBody } = data;
-// Generate issued date from dateTo (e.g. "December 2024" → "1st December 2024")
-function formatIssuedDate(dateStr) {
-  if (!dateStr) return '';
-  try {
-    const date = new Date('1 ' + dateStr);
-    if (isNaN(date)) return dateStr;
-    const day = 1;
-    const suffix = 'st';
-    const month = date.toLocaleString('en-US', { month: 'long' });
-    const year = date.getFullYear();
-    return `${day}${suffix} ${month} ${year}`;
-  } catch {
-    return dateStr;
+
+  function formatIssuedDate(dateStr) {
+    if (!dateStr) return '';
+    try {
+      const date = new Date('1 ' + dateStr);
+      if (isNaN(date)) return dateStr;
+      const month = date.toLocaleString('en-US', { month: 'long' });
+      const year = date.getFullYear();
+      return `1st ${month} ${year}`;
+    } catch {
+      return dateStr;
+    }
   }
-}
 
-const issuedDate = formatIssuedDate(dateTo);
-
+  const issuedDate = formatIssuedDate(dateTo);
   const fullName = recipientName || ((data.firstName || '') + ' ' + (data.lastName || '')).trim();
-
   const bodyText = customBody || `This is to certify that the candidate has successfully completed the ${courseName || ''} course at Persevex, demonstrating strong commitment and competence throughout the program.`;
 
   return `<!DOCTYPE html>
@@ -59,7 +55,6 @@ const issuedDate = formatIssuedDate(dateTo);
   .recipient-name { font-family: 'Open Sans', sans-serif; font-size: 38px; font-weight: 700; color: #1a1a4e; text-align: center; margin: 10px 0 4px; z-index: 1; }
   .usn-id { font-size: 12px; color: #888; letter-spacing: 2px; text-align: center; margin-bottom: 14px; z-index: 1; }
   .body-text { font-size: 13px; color: #444; text-align: center; max-width: 580px; line-height: 1.8; font-weight: 600; z-index: 1; }
-  .issued-label { font-size: 12px; color: #555; text-align: right; width: 100%; margin-top: 20px; padding-right: 10px; z-index: 1; }
   .footer { display: flex; justify-content: center; align-items: flex-end; width: 100%; margin-top: 10px; gap: 60px; z-index: 1; }
   .seal-block { display: flex; flex-direction: column; align-items: center; }
   .seal-img { width: 80px; height: 80px; object-fit: contain; }
@@ -85,9 +80,9 @@ const issuedDate = formatIssuedDate(dateTo);
     ${usnId ? `<div class="usn-id">${usnId}</div>` : ''}
     <div class="body-text">${bodyText}</div>
     <div style="text-align:center; margin-top:16px; z-index:1;">
-  ${(dateFrom && dateTo) ? `<div style="color:#888; font-size:12px; margin-bottom:4px;">Period: ${dateFrom} — ${dateTo}</div>` : ''}
-  ${issuedDate ? `<div style="color:#555; font-size:12px;">Issued on: ${issuedDate}</div>` : ''}
-</div>
+      ${(dateFrom && dateTo) ? `<div style="color:#888; font-size:12px; margin-bottom:4px;">Period: ${dateFrom} — ${dateTo}</div>` : ''}
+      ${issuedDate ? `<div style="color:#555; font-size:12px;">Issued on: ${issuedDate}</div>` : ''}
+    </div>
     <div class="footer">
       <div class="seal-block">
         ${seal ? `<img class="seal-img" src="data:image/png;base64,${seal}" alt="ISO Seal" />` : ''}
@@ -122,9 +117,9 @@ function generateCertificateHTML(template, data) {
   const borderStyles = {
     classic: `border: 8px double ${design.borderColor}; outline: 2px solid ${design.accentColor}; outline-offset: -16px;`,
     elegant: `border: 6px solid ${design.accentColor}; box-shadow: 0 0 0 12px ${design.borderColor}, 0 0 0 18px ${design.accentColor};`,
-    modern: `border-top: 6px solid ${design.accentColor}; border-bottom: 6px solid ${design.accentColor};`,
+    modern:  `border-top: 6px solid ${design.accentColor}; border-bottom: 6px solid ${design.accentColor};`,
     minimal: `border-left: 6px solid ${design.accentColor};`,
-    ornate: `border: 12px solid ${design.borderColor}; border-image: repeating-linear-gradient(45deg, ${design.borderColor}, ${design.accentColor} 10px) 12;`
+    ornate:  `border: 12px solid ${design.borderColor};`
   };
 
   const bgStyle = design.backgroundImage
@@ -144,12 +139,11 @@ function generateCertificateHTML(template, data) {
   .corner-accent.tr { top: 0; right: 0; background: linear-gradient(225deg, ${design.borderColor} 0%, transparent 60%); clip-path: polygon(100% 0, 100% 100%, 0 0); }
   .corner-accent.bl { bottom: 0; left: 0; background: linear-gradient(45deg, ${design.borderColor} 0%, transparent 60%); clip-path: polygon(0 0, 0 100%, 100% 100%); }
   .corner-accent.br { bottom: 0; right: 0; background: linear-gradient(315deg, ${design.borderColor} 0%, transparent 60%); clip-path: polygon(100% 0, 0 100%, 100% 100%); }
-  .header { text-align: center; margin-bottom: 20px; }
-  .title { font-size: 48px; font-weight: 700; letter-spacing: 8px; color: ${design.borderColor}; text-transform: uppercase; font-family: 'Times New Roman', serif; }
-  .subtitle { font-size: 22px; color: ${design.accentColor}; letter-spacing: 3px; margin-top: 4px; font-style: italic; }
+  .title { font-size: 48px; font-weight: 700; letter-spacing: 8px; color: ${design.borderColor}; text-transform: uppercase; font-family: 'Times New Roman', serif; text-align: center; }
+  .subtitle { font-size: 22px; color: ${design.accentColor}; letter-spacing: 3px; margin-top: 4px; font-style: italic; text-align: center; }
   .divider { width: 200px; height: 2px; background: linear-gradient(to right, transparent, ${design.accentColor}, transparent); margin: 18px auto; }
   .presented-to { font-size: 13px; letter-spacing: 3px; color: #666; text-transform: uppercase; text-align: center; margin-bottom: 12px; }
-  .recipient-name { font-size: 52px; color: ${design.borderColor}; text-align: center; font-family: 'Dancing Script', 'Brush Script MT', cursive; font-style: italic; margin-bottom: 16px; line-height: 1.2; }
+  .recipient-name { font-size: 52px; color: ${design.borderColor}; text-align: center; font-family: 'Brush Script MT', cursive; font-style: italic; margin-bottom: 16px; line-height: 1.2; }
   .usn-id { font-size: 13px; color: #888; letter-spacing: 2px; text-align: center; margin-top: -10px; margin-bottom: 12px; }
   .body-text { font-size: 15px; color: #444; text-align: center; max-width: 680px; line-height: 1.7; margin-bottom: 24px; }
   .date-period { font-size: 14px; color: #555; text-align: center; margin-bottom: 30px; font-style: italic; }
@@ -161,7 +155,6 @@ function generateCertificateHTML(template, data) {
   .seal { width: 90px; height: 90px; border-radius: 50%; border: 3px solid ${design.accentColor}; display: flex; flex-direction: column; align-items: center; justify-content: center; background: rgba(255,255,255,0.5); position: relative; }
   .seal::before { content: ''; position: absolute; inset: 6px; border-radius: 50%; border: 1px dashed ${design.accentColor}; }
   .seal-text { font-size: 8px; color: ${design.accentColor}; letter-spacing: 1px; text-transform: uppercase; text-align: center; font-weight: 600; z-index: 1; }
-  .org-name { font-size: 13px; color: ${design.accentColor}; letter-spacing: 2px; text-transform: uppercase; text-align: center; }
 </style>
 </head>
 <body>
@@ -170,10 +163,8 @@ function generateCertificateHTML(template, data) {
   <div class="corner-accent tr"></div>
   <div class="corner-accent bl"></div>
   <div class="corner-accent br"></div>
-  <div class="header">
-    <div class="title">${content.titleText || 'CERTIFICATE'}</div>
-    <div class="subtitle">${content.subtitleText || 'of Achievement'}</div>
-  </div>
+  <div class="title">${content.titleText || 'CERTIFICATE'}</div>
+  <div class="subtitle">${content.subtitleText || 'of Achievement'}</div>
   <div class="divider"></div>
   <div class="presented-to">${content.presentedToText || 'THIS CERTIFICATE IS PROUDLY PRESENTED TO'}</div>
   <div class="recipient-name">${fullName}</div>
@@ -189,7 +180,7 @@ function generateCertificateHTML(template, data) {
     </div>
     <div style="text-align:center;">
       <div class="seal"><div class="seal-text">${content.organizationName || 'CertForge'}</div></div>
-      <div class="org-name" style="margin-top:8px; font-size:11px;">${content.organizationName || 'CertForge Academy'}</div>
+      <div style="font-size:11px; color:${design.accentColor}; letter-spacing:2px; text-transform:uppercase; margin-top:8px;">${content.organizationName || 'CertForge Academy'}</div>
     </div>
     <div class="signature-block">
       <div class="signature-line"></div>
@@ -222,53 +213,79 @@ function generateCustomHTML(template, data) {
   };
 
   function resolveText(block) {
-    if (block.fieldType === 'static') return block.text;
-    return PLACEHOLDER_VALUES[block.fieldType] || block.text;
+    if (block.fieldType === 'static') return block.text || '';
+    return PLACEHOLDER_VALUES[block.fieldType] || block.text || '';
   }
-
-  function generateQRDataURL(text) {
-    // Simple QR placeholder — rendered as styled box in HTML
-    // For real QR, qrcode lib would be used server-side
-    return `<div style="width:${block.width}px;height:${block.height}px;background:#000;display:flex;align-items:center;justify-content:center;color:#fff;font-size:9px;text-align:center;padding:4px;">QR: ${text.substring(0,20)}</div>`;
-  }
-
-  const blockStyles = (blocks || [])
-    .filter(b => b.visible !== false)
-    .map(b => {
-      const resolvedText = resolveText(b);
-      if (b.fieldType === 'qr') {
-        return `
-        <div style="
-          position: absolute;
-          left: ${b.x}px; top: ${b.y}px;
-          width: ${b.width}px; height: ${b.height}px;
-          display: flex; align-items: center; justify-content: center;
-        ">
-          <img src="https://api.qrserver.com/v1/create-qr-code/?size=${Math.round(b.width)}x${Math.round(b.height)}&data=${encodeURIComponent(b.text)}"
-            style="width:100%;height:100%;object-fit:contain;" />
-        </div>`;
-      }
-      return `
-      <div style="
-        position: absolute;
-        left: ${b.x}px; top: ${b.y}px;
-        width: ${b.width}px; height: ${b.height}px;
-        font-size: ${b.fontSize}px;
-        font-family: ${b.fontFamily || 'Georgia'}, serif;
-        color: ${b.color || '#000'};
-        font-weight: ${b.bold ? 'bold' : 'normal'};
-        font-style: ${b.italic ? 'italic' : 'normal'};
-        text-align: ${b.align || 'center'};
-        display: flex;
-        align-items: center;
-        justify-content: ${b.align === 'left' ? 'flex-start' : b.align === 'right' ? 'flex-end' : 'center'};
-        overflow: hidden;
-        line-height: 1.2;
-      ">${resolvedText}</div>`;
-    }).join('\n');
 
   const canvasW = width || 1122;
   const canvasH = height || 794;
+
+  const blockHTML = (blocks || [])
+    .filter(b => b.visible !== false)
+    .map(b => {
+
+      // ── Eraser / cover block ──
+      if (b.fieldType === 'eraser') {
+        return `<div style="
+          position:absolute;
+          left:${b.x}px; top:${b.y}px;
+          width:${b.width}px; height:${b.height}px;
+          background:${b.eraserColor || '#ffffff'};
+          z-index:1;
+        "></div>`;
+      }
+
+      // ── QR code block ──
+      if (b.fieldType === 'qr') {
+        return `<div style="
+          position:absolute;
+          left:${b.x}px; top:${b.y}px;
+          width:${b.width}px; height:${b.height}px;
+          display:flex; align-items:center; justify-content:center;
+          z-index:2;
+        ">
+          <img
+            src="https://api.qrserver.com/v1/create-qr-code/?size=${Math.round(b.width)}x${Math.round(b.height)}&data=${encodeURIComponent(b.text || '')}"
+            style="width:100%;height:100%;object-fit:contain;"
+          />
+        </div>`;
+      }
+
+      // ── Embedded image / logo block ──
+      if (b.fieldType === 'image') {
+        return `<div style="
+          position:absolute;
+          left:${b.x}px; top:${b.y}px;
+          width:${b.width}px; height:${b.height}px;
+          z-index:2;
+        ">
+          <img src="${b.text}" style="width:100%;height:100%;object-fit:contain;" />
+        </div>`;
+      }
+
+      // ── Text block (static + all placeholders) ──
+      const resolvedText = resolveText(b);
+      const justify = b.align === 'left' ? 'flex-start'
+                    : b.align === 'right' ? 'flex-end'
+                    : 'center';
+      return `<div style="
+        position:absolute;
+        left:${b.x}px; top:${b.y}px;
+        width:${b.width}px; height:${b.height}px;
+        font-size:${b.fontSize || 16}px;
+        font-family:${b.fontFamily || 'Georgia'}, serif;
+        color:${b.color || '#000000'};
+        font-weight:${b.bold ? 'bold' : 'normal'};
+        font-style:${b.italic ? 'italic' : 'normal'};
+        text-align:${b.align || 'center'};
+        display:flex;
+        align-items:center;
+        justify-content:${justify};
+        overflow:hidden;
+        line-height:1.2;
+        z-index:2;
+      ">${resolvedText}</div>`;
+    }).join('\n');
 
   return `<!DOCTYPE html>
 <html>
@@ -305,9 +322,9 @@ function generateCustomHTML(template, data) {
 </head>
 <body>
 <div class="cert-wrapper">
-  ${base64Image ? `<img class="cert-bg" src="${base64Image}" alt="certificate" />` : ''}
+  ${base64Image ? `<img class="cert-bg" src="${base64Image}" alt="certificate background" />` : ''}
   <div class="cert-layer">
-    ${blockStyles}
+    ${blockHTML}
   </div>
 </div>
 </body>

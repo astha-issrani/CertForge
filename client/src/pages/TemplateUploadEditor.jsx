@@ -29,18 +29,19 @@ export default function TemplateUploadEditor({ onBack }) {
   const fileRef    = useRef(null)
   const imgFileRef = useRef(null)
 
-  const [stage, setStage]         = useState('upload')
-  const [bgImage, setBgImage]     = useState(null)
-  const [imgDims, setImgDims]     = useState({ w: 1122, h: 794 })
-  const [blocks, setBlocks]       = useState([])
-  const [selected, setSelected]   = useState(null)
-  const [uploading, setUploading] = useState(false)
+  const [stage, setStage]               = useState('upload')
+  const [bgImage, setBgImage]           = useState(null)
+  const [imgDims, setImgDims]           = useState({ w: 1122, h: 794 })
+  const [blocks, setBlocks]             = useState([])
+  const [selected, setSelected]         = useState(null)
+  const [uploading, setUploading]       = useState(false)
+  const [uploadProgress, setUploadProgress] = useState('')
   const [templateName, setTemplateName] = useState('My Custom Template')
-  const [dragging, setDragging]   = useState(null)
-  const [resizing, setResizing]   = useState(null)
-  const [saveStatus, setSaveStatus] = useState('')
-  const [tab, setTab]             = useState('style')
-  const [showGrid, setShowGrid]   = useState(false)
+  const [dragging, setDragging]         = useState(null)
+  const [resizing, setResizing]         = useState(null)
+  const [saveStatus, setSaveStatus]     = useState('')
+  const [tab, setTab]                   = useState('style')
+  const [showGrid, setShowGrid]         = useState(false)
 
   const SCALE = Math.min(0.55, (window.innerWidth - 320) / 1122)
 
@@ -48,33 +49,55 @@ export default function TemplateUploadEditor({ onBack }) {
   const updateBlock = (id, patch) => setBlocks(bs => bs.map(b => b.id === id ? { ...b, ...patch } : b))
   const deleteBlock = (id) => { setBlocks(bs => bs.filter(b => b.id !== id)); if (selected === id) setSelected(null) }
 
+  // ── File upload handler — supports both image and PDF ──
   const handleImageUpload = async (file) => {
     if (!file) return
-    if (!file.type.startsWith('image/')) {
-      alert('Please upload an image file (PNG, JPG, etc.)')
+    const isPdf  = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')
+    const isImage = file.type.startsWith('image/')
+    if (!isPdf && !isImage) {
+      alert('Please upload an image (PNG, JPG) or PDF file')
       return
     }
     setUploading(true)
+    setUploadProgress(isPdf ? 'Extracting PDF text and rendering...' : 'Loading image...')
     try {
-      const dataUrl = await new Promise((resolve, reject) => {
-        const reader = new FileReader()
-        reader.onload  = e => resolve(e.target.result)
-        reader.onerror = () => reject(new Error('Failed to read file'))
-        reader.readAsDataURL(file)
-      })
-      const dims = await new Promise((resolve) => {
-        const img = new Image()
-        img.onload  = () => resolve({ w: img.naturalWidth, h: img.naturalHeight })
-        img.onerror = () => resolve({ w: 1122, h: 794 })
-        img.src = dataUrl
-      })
-      setBgImage(dataUrl)
-      setImgDims(dims)
-      setStage('edit')
+      if (isPdf) {
+        const fd = new FormData()
+        fd.append('pdf', file)
+        const { data } = await axios.post('/api/templates/upload-pdf', fd, {
+          headers: { 'Content-Type': 'multipart/form-data' }
+        })
+        if (data.base64Image) setBgImage(data.base64Image)
+        setImgDims({ w: data.width || 1122, h: data.height || 794 })
+        if (data.blocks && data.blocks.length > 0) {
+          setBlocks(data.blocks)
+          setSelected(data.blocks[0].id)
+          setTab('blocks')
+        }
+        setStage('edit')
+      } else {
+        // Pure client-side for images — no server needed
+        const dataUrl = await new Promise((resolve, reject) => {
+          const reader = new FileReader()
+          reader.onload  = e => resolve(e.target.result)
+          reader.onerror = () => reject(new Error('Failed to read file'))
+          reader.readAsDataURL(file)
+        })
+        const dims = await new Promise((resolve) => {
+          const img = new Image()
+          img.onload  = () => resolve({ w: img.naturalWidth, h: img.naturalHeight })
+          img.onerror = () => resolve({ w: 1122, h: 794 })
+          img.src = dataUrl
+        })
+        setBgImage(dataUrl)
+        setImgDims(dims)
+        setStage('edit')
+      }
     } catch (err) {
-      alert('Failed to load image: ' + err.message)
+      alert('Failed to load file: ' + (err.response?.data?.error || err.message))
     }
     setUploading(false)
+    setUploadProgress('')
   }
 
   const handleCanvasClick = (e) => {
@@ -178,36 +201,56 @@ export default function TemplateUploadEditor({ onBack }) {
       setSaveStatus('saved')
       setTimeout(() => { if (onBack) onBack() }, 1200)
     } catch (err) {
-      alert('Save failed: ' + err.message)
+      alert('Save failed: ' + (err.response?.data?.error || err.message))
       setSaveStatus('')
     }
   }
 
-  // ── Upload screen ──
+  // ─────────────────── UPLOAD SCREEN ───────────────────
   if (stage === 'upload') return (
     <div style={S.page}>
       <div style={S.uploadCard}>
         <div style={S.uploadIconWrap}><Upload size={32} color="#4a90e2" /></div>
-        <h2 style={S.uploadTitle}>Upload Your Certificate Template</h2>
-        <p style={S.uploadSub}>Upload a PNG or JPG of your certificate design. You'll then place text, images, and QR codes exactly where you want them.</p>
+        <h2 style={S.uploadTitle}>Upload Certificate Template</h2>
+        <p style={S.uploadSub}>
+          Upload a <strong style={{ color:'#e6edf3' }}>PDF</strong> for real text editing —
+          text blocks are auto-extracted and placed on the canvas.<br /><br />
+          Or upload a <strong style={{ color:'#e6edf3' }}>PNG / JPG</strong> and manually place blocks.
+        </p>
         <div style={S.dropZone}
           onClick={() => fileRef.current?.click()}
           onDragOver={e => { e.preventDefault(); e.currentTarget.style.borderColor = '#4a90e2' }}
-          onDragLeave={e => { e.currentTarget.style.borderColor = '#334' }}
-          onDrop={e => { e.preventDefault(); handleImageUpload(e.dataTransfer.files[0]) }}>
-          <input ref={fileRef} type="file" accept="image/*" style={{ display: 'none' }}
-            onChange={e => handleImageUpload(e.target.files[0])} />
-          {uploading
-            ? <><div style={S.spinner} /><p style={{ color: '#aaa', marginTop: 12 }}>Loading...</p></>
-            : <><div style={{ fontSize: 48 }}>🖼️</div>
-               <div style={S.dropTitle}>Drop image here or click to browse</div>
-               <div style={S.dropSub}>PNG, JPG • any size</div></>}
+          onDragLeave={e => { e.currentTarget.style.borderColor = '#30363d' }}
+          onDrop={e => { e.preventDefault(); e.currentTarget.style.borderColor = '#30363d'; handleImageUpload(e.dataTransfer.files[0]) }}>
+          <input ref={fileRef} type="file" accept="image/*,.pdf"
+            style={{ display: 'none' }} onChange={e => handleImageUpload(e.target.files[0])} />
+          {uploading ? (
+            <>
+              <div style={S.spinner} />
+              <p style={{ color: '#8b949e', marginTop: 12, fontSize: 13 }}>{uploadProgress}</p>
+            </>
+          ) : (
+            <>
+              <div style={{ fontSize: 48 }}>🖼️</div>
+              <div style={S.dropTitle}>Drop file here or click to browse</div>
+              <div style={S.dropSub}>PDF (with text extraction) • PNG • JPG</div>
+              <div style={{ display:'flex', gap:10, marginTop:12 }}>
+                <span style={S.formatBadge}>📄 PDF — auto text</span>
+                <span style={S.formatBadge}>🖼️ Image — manual</span>
+              </div>
+            </>
+          )}
         </div>
-        {onBack && <button style={S.backBtn} onClick={onBack}><ChevronLeft size={14}/> Back</button>}
+        {onBack && (
+          <button style={S.backBtn} onClick={onBack}>
+            <ChevronLeft size={14} /> Back
+          </button>
+        )}
       </div>
     </div>
   )
 
+  // ─────────────────── EDITOR SCREEN ───────────────────
   const cW = imgDims.w * SCALE
   const cH = imgDims.h * SCALE
 
@@ -216,21 +259,33 @@ export default function TemplateUploadEditor({ onBack }) {
       {/* Top bar */}
       <div style={S.topBar}>
         {onBack && <button style={S.iconBtn} onClick={onBack}><ChevronLeft size={16}/> Back</button>}
-        <input style={S.nameInput} value={templateName} onChange={e => setTemplateName(e.target.value)} placeholder="Template name..." />
+        <input style={S.nameInput} value={templateName}
+          onChange={e => setTemplateName(e.target.value)} placeholder="Template name..." />
         <div style={{ display:'flex', gap:6, flexWrap:'wrap' }}>
-          <button style={S.iconBtn} onClick={() => setStage('upload')} title="Change image">🖼️ Change Image</button>
-          <button style={S.iconBtn} onClick={addEraser} title="Cover / erase original text in image">🟫 Cover Text</button>
-          <button style={S.iconBtn} onClick={addQR}><QrCode size={14}/> QR Code</button>
-          <button style={S.iconBtn} onClick={() => imgFileRef.current?.click()}><ImageIcon size={14}/> Add Image</button>
+          <button style={S.iconBtn} onClick={() => { setStage('upload'); setBlocks([]); setSelected(null) }}>
+            🖼️ Change File
+          </button>
+          <button style={S.iconBtn} onClick={addEraser} title="Add a cover block to hide original text">
+            🟫 Cover Text
+          </button>
+          <button style={S.iconBtn} onClick={addQR}>
+            <QrCode size={14}/> QR Code
+          </button>
+          <button style={S.iconBtn} onClick={() => imgFileRef.current?.click()}>
+            <ImageIcon size={14}/> Add Image
+          </button>
           <button
             style={{ ...S.iconBtn, ...(showGrid ? { color:'#58a6ff', borderColor:'#58a6ff', background:'#1c2128' } : {}) }}
             onClick={() => setShowGrid(g => !g)} title="Toggle alignment grid">
             ⊞ Grid
           </button>
-          <input ref={imgFileRef} type="file" accept="image/*" style={{ display:'none' }} onChange={e => addImageBlock(e.target.files[0])} />
-          <button style={{ ...S.iconBtn, background: saveStatus==='saved'?'#22c55e':'#4a90e2', color:'#fff', border:'none' }}
+          <input ref={imgFileRef} type="file" accept="image/*"
+            style={{ display:'none' }} onChange={e => addImageBlock(e.target.files[0])} />
+          <button
+            style={{ ...S.iconBtn, background: saveStatus==='saved' ? '#22c55e' : '#4a90e2', color:'#fff', border:'none' }}
             onClick={handleSave} disabled={saveStatus==='saving'}>
-            <Save size={14}/> {saveStatus==='saving'?'Saving...':saveStatus==='saved'?'Saved! ✓':'Save Template'}
+            <Save size={14}/>
+            {saveStatus==='saving' ? 'Saving...' : saveStatus==='saved' ? 'Saved! ✓' : 'Save Template'}
           </button>
         </div>
       </div>
@@ -239,7 +294,7 @@ export default function TemplateUploadEditor({ onBack }) {
         {/* Canvas */}
         <div style={S.canvasArea}>
           <div style={S.canvasHint}>
-            💡 Click canvas to add text &nbsp;|&nbsp; 🟫 Cover Text hides original image text &nbsp;|&nbsp; then place your block on top
+            💡 Click canvas to add text &nbsp;|&nbsp; 🟫 Cover Text hides original &nbsp;|&nbsp; Drag blocks to reposition
           </div>
           <div ref={canvasRef} style={{ ...S.canvas, width: cW, height: cH }} onClick={handleCanvasClick}>
             {bgImage && <img src={bgImage} style={S.bgImg} alt="template" draggable={false} />}
@@ -260,48 +315,46 @@ export default function TemplateUploadEditor({ onBack }) {
                 onMouseDown={e => onMouseDown(e, b.id, 'move')}
               >
                 {b.fieldType === 'eraser' ? (
-                  // Eraser block — solid fill to cover original image text
                   selected === b.id && (
                     <div style={{ width:'100%', height:'100%', display:'flex', alignItems:'center', justifyContent:'center' }}>
-                      <span style={{ fontSize: 9, color:'rgba(0,0,0,0.25)', userSelect:'none', pointerEvents:'none', letterSpacing:1 }}>
-                        COVER
-                      </span>
+                      <span style={{ fontSize:9, color:'rgba(0,0,0,0.25)', userSelect:'none', pointerEvents:'none', letterSpacing:1 }}>COVER</span>
                     </div>
                   )
                 ) : b.fieldType === 'qr' ? (
                   <div style={{ width:'100%', height:'100%', display:'flex', alignItems:'center', justifyContent:'center' }}>
-                    <img src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(b.text)}`}
+                    <img
+                      src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(b.text)}`}
                       style={{ width:'80%', height:'80%', objectFit:'contain' }} alt="QR" />
                   </div>
                 ) : b.fieldType === 'image' ? (
                   <img src={b.text} style={{ width:'100%', height:'100%', objectFit:'contain' }} alt="img" draggable={false} />
                 ) : (
                   <div style={{
-                    width:'100%', height:'100%', fontSize: b.fontSize * SCALE,
+                    width:'100%', height:'100%',
+                    fontSize: b.fontSize * SCALE,
                     fontFamily: b.fontFamily, color: b.color,
                     fontWeight: b.bold ? 'bold' : 'normal',
                     fontStyle: b.italic ? 'italic' : 'normal',
-                    textAlign: b.align, display:'flex', alignItems:'center',
+                    textAlign: b.align,
+                    display:'flex', alignItems:'center',
                     justifyContent: b.align==='left' ? 'flex-start' : b.align==='right' ? 'flex-end' : 'center',
                     overflow:'hidden', userSelect:'none', pointerEvents:'none', padding:'0 2px',
                   }}>
                     {PLACEHOLDER_LABELS[b.fieldType] ? `[${PLACEHOLDER_LABELS[b.fieldType]}]` : b.text}
                   </div>
                 )}
-
                 {selected === b.id && (
                   <div style={S.resizeHandle} onMouseDown={e => onMouseDown(e, b.id, 'resize')} />
                 )}
               </div>
             ))}
 
-            {/* Grid overlay */}
             {showGrid && (
               <div style={{
                 position:'absolute', top:0, left:0, width:'100%', height:'100%',
                 backgroundImage:`linear-gradient(rgba(74,144,226,0.12) 1px, transparent 1px),
                                  linear-gradient(90deg, rgba(74,144,226,0.12) 1px, transparent 1px)`,
-                backgroundSize:`${20 * SCALE}px ${20 * SCALE}px`,
+                backgroundSize:`${20*SCALE}px ${20*SCALE}px`,
                 pointerEvents:'none', zIndex:50,
               }} />
             )}
@@ -333,14 +386,15 @@ export default function TemplateUploadEditor({ onBack }) {
               </button>
 
               {blocks.length === 0
-                ? <div style={S.empty}>Click on the canvas to add text blocks, or use the buttons above</div>
+                ? <div style={S.empty}>Click the canvas to add blocks, or upload a PDF to auto-extract text</div>
                 : blocks.map(b => (
-                  <div key={b.id} style={{ ...S.blockRow, ...(selected===b.id ? S.blockRowOn : {}) }}
+                  <div key={b.id}
+                    style={{ ...S.blockRow, ...(selected===b.id ? S.blockRowOn : {}) }}
                     onClick={() => { setSelected(b.id); setTab('style') }}>
                     <span style={{ fontSize:11, flex:1, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', color:'#ccd' }}>
-                      {b.fieldType === 'eraser'  ? '🟫 Cover Block'
-                       : b.fieldType === 'qr'    ? `QR: ${b.text.substring(0,20)}`
-                       : b.fieldType === 'image'  ? '🖼️ Image'
+                      {b.fieldType === 'eraser' ? '🟫 Cover Block'
+                       : b.fieldType === 'qr'   ? `QR: ${b.text.substring(0,20)}`
+                       : b.fieldType === 'image' ? '🖼️ Image'
                        : PLACEHOLDER_LABELS[b.fieldType] ? `[${PLACEHOLDER_LABELS[b.fieldType]}]`
                        : b.text.substring(0,28)}
                     </span>
@@ -354,7 +408,7 @@ export default function TemplateUploadEditor({ onBack }) {
 
           {/* Style editor — nothing selected */}
           {tab==='style' && !selectedBlock && (
-            <div style={S.empty}>Click a block on the canvas or select from "All Blocks" to edit it</div>
+            <div style={S.empty}>Click a block on the canvas or select one from "All Blocks"</div>
           )}
 
           {/* Style editor — block selected */}
@@ -367,7 +421,7 @@ export default function TemplateUploadEditor({ onBack }) {
                 </select>
               </Field>
 
-              {/* Eraser color picker */}
+              {/* Eraser color */}
               {selectedBlock.fieldType === 'eraser' && (
                 <Field label="Cover Color">
                   <div style={{ display:'flex', alignItems:'center', gap:8 }}>
@@ -378,22 +432,22 @@ export default function TemplateUploadEditor({ onBack }) {
                       onChange={e => updateBlock(selected, { eraserColor: e.target.value })}
                     />
                     <span style={{ fontSize:11, color:'#778', lineHeight:1.5 }}>
-                      Match this to your certificate's background color to hide the original text
+                      Match certificate background to hide original text
                     </span>
                   </div>
                 </Field>
               )}
 
-              {/* Text content for static/qr */}
-              {(selectedBlock.fieldType==='static' || selectedBlock.fieldType==='qr') && (
-                <Field label={selectedBlock.fieldType==='qr' ? 'URL for QR Code' : 'Text Content'}>
+              {/* Text content */}
+              {(selectedBlock.fieldType === 'static' || selectedBlock.fieldType === 'qr') && (
+                <Field label={selectedBlock.fieldType === 'qr' ? 'URL for QR Code' : 'Text Content'}>
                   <textarea style={{ ...S.input, height:60, resize:'vertical' }}
                     value={selectedBlock.text}
                     onChange={e => updateBlock(selected, { text: e.target.value })} />
                 </Field>
               )}
 
-              {/* Font/style controls — not for qr, image, or eraser */}
+              {/* Font + style controls */}
               {selectedBlock.fieldType !== 'qr' && selectedBlock.fieldType !== 'image' && selectedBlock.fieldType !== 'eraser' && (<>
                 <div style={{ display:'flex', gap:8 }}>
                   <Field label="Font Size" style={{ flex:1 }}>
@@ -402,7 +456,8 @@ export default function TemplateUploadEditor({ onBack }) {
                   </Field>
                   <Field label="Color" style={{ flex:1 }}>
                     <input style={{ ...S.input, padding:2, height:34, cursor:'pointer' }} type="color"
-                      value={selectedBlock.color} onChange={e => updateBlock(selected, { color: e.target.value })} />
+                      value={selectedBlock.color}
+                      onChange={e => updateBlock(selected, { color: e.target.value })} />
                   </Field>
                 </div>
                 <Field label="Font">
@@ -413,23 +468,30 @@ export default function TemplateUploadEditor({ onBack }) {
                 </Field>
                 <Field label="Style & Align">
                   <div style={{ display:'flex', gap:6 }}>
-                    {[['bold',<b>B</b>],['italic',<i>I</i>]].map(([prop,label]) => (
-                      <button key={prop} style={{ ...S.toggle, ...(selectedBlock[prop] ? S.toggleOn : {}) }}
-                        onClick={() => updateBlock(selected, { [prop]: !selectedBlock[prop] })}>{label}</button>
+                    {[['bold', <b>B</b>], ['italic', <i>I</i>]].map(([prop, label]) => (
+                      <button key={prop}
+                        style={{ ...S.toggle, ...(selectedBlock[prop] ? S.toggleOn : {}) }}
+                        onClick={() => updateBlock(selected, { [prop]: !selectedBlock[prop] })}>
+                        {label}
+                      </button>
                     ))}
-                    {[['left',<AlignLeft size={13}/>],['center',<AlignCenter size={13}/>],['right',<AlignRight size={13}/>]].map(([a,icon]) => (
-                      <button key={a} style={{ ...S.toggle, ...(selectedBlock.align===a ? S.toggleOn : {}) }}
-                        onClick={() => updateBlock(selected, { align: a })}>{icon}</button>
+                    {[['left', <AlignLeft size={13}/>], ['center', <AlignCenter size={13}/>], ['right', <AlignRight size={13}/>]].map(([a, icon]) => (
+                      <button key={a}
+                        style={{ ...S.toggle, ...(selectedBlock.align === a ? S.toggleOn : {}) }}
+                        onClick={() => updateBlock(selected, { align: a })}>
+                        {icon}
+                      </button>
                     ))}
-                    <button style={{ ...S.toggle, ...(selectedBlock.visible!==false ? S.toggleOn : {}) }}
-                      onClick={() => updateBlock(selected, { visible: selectedBlock.visible===false })}>
-                      {selectedBlock.visible!==false ? <Eye size={13}/> : <EyeOff size={13}/>}
+                    <button
+                      style={{ ...S.toggle, ...(selectedBlock.visible !== false ? S.toggleOn : {}) }}
+                      onClick={() => updateBlock(selected, { visible: selectedBlock.visible === false })}>
+                      {selectedBlock.visible !== false ? <Eye size={13}/> : <EyeOff size={13}/>}
                     </button>
                   </div>
                 </Field>
               </>)}
 
-              {/* Position & size — for all block types */}
+              {/* Position & size */}
               <div style={{ display:'flex', gap:8 }}>
                 <Field label="X" style={{ flex:1 }}>
                   <input style={S.input} type="number" value={Math.round(selectedBlock.x)}
@@ -473,13 +535,14 @@ function Field({ label, children, style }) {
 
 const S = {
   page: { minHeight:'100vh', display:'flex', alignItems:'center', justifyContent:'center', background:'#0d1117', padding:24 },
-  uploadCard: { background:'#161b22', borderRadius:16, padding:48, maxWidth:500, width:'100%', boxShadow:'0 4px 32px rgba(0,0,0,0.4)', textAlign:'center', border:'1px solid #30363d' },
+  uploadCard: { background:'#161b22', borderRadius:16, padding:48, maxWidth:520, width:'100%', boxShadow:'0 4px 32px rgba(0,0,0,0.4)', textAlign:'center', border:'1px solid #30363d' },
   uploadIconWrap: { width:64, height:64, borderRadius:'50%', background:'rgba(74,144,226,0.15)', display:'flex', alignItems:'center', justifyContent:'center', margin:'0 auto 16px' },
   uploadTitle: { fontSize:20, fontWeight:700, color:'#e6edf3', marginBottom:8 },
-  uploadSub: { fontSize:13, color:'#8b949e', marginBottom:24, lineHeight:1.6 },
-  dropZone: { border:'2px dashed #30363d', borderRadius:12, padding:'40px 24px', cursor:'pointer', transition:'border-color 0.2s', minHeight:150, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:8 },
+  uploadSub: { fontSize:13, color:'#8b949e', marginBottom:24, lineHeight:1.7 },
+  dropZone: { border:'2px dashed #30363d', borderRadius:12, padding:'40px 24px', cursor:'pointer', transition:'border-color 0.2s', minHeight:160, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:8 },
   dropTitle: { fontSize:14, fontWeight:600, color:'#e6edf3' },
   dropSub: { fontSize:12, color:'#8b949e' },
+  formatBadge: { fontSize:11, padding:'4px 10px', background:'rgba(88,166,255,0.1)', border:'1px solid rgba(88,166,255,0.2)', borderRadius:20, color:'#58a6ff' },
   spinner: { width:28, height:28, border:'3px solid #30363d', borderTop:'3px solid #4a90e2', borderRadius:'50%', animation:'spin 0.8s linear infinite' },
   backBtn: { marginTop:16, background:'none', border:'1px solid #30363d', borderRadius:8, padding:'7px 14px', cursor:'pointer', color:'#8b949e', fontSize:12, display:'flex', alignItems:'center', gap:4, margin:'16px auto 0' },
 

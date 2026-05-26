@@ -17,7 +17,6 @@ async function getTemplate(id) {
   if (prebuilt) return prebuilt;
 
   if (Template) {
-    // Guard against invalid ObjectId — mongoose throws CastError otherwise
     const mongoose = require('mongoose');
     if (!mongoose.Types.ObjectId.isValid(id)) return null;
     try {
@@ -36,15 +35,32 @@ function buildHTML(template, data) {
   return generateCertificateHTML(template, data);
 }
 
+const PDF_OPTIONS = {
+  format: null,
+  width: '1122px',
+  height: '794px',
+  printBackground: true,
+  margin: { top: '0px', bottom: '0px', left: '0px', right: '0px' },
+  args: [
+    '--no-sandbox',
+    '--disable-setuid-sandbox',
+    '--disable-dev-shm-usage',
+    '--disable-gpu',
+    '--no-first-run',
+    '--no-zygote',
+    '--single-process',
+  ]
+};
+
 // POST /api/certificates/preview
 router.post('/preview', async (req, res) => {
   try {
     const { templateId, templateOverride, recipientName, dateFrom, dateTo, customBody } = req.body;
 
-    // ✅ Use templateOverride directly if provided (from TemplateEditor live preview)
+    // Use templateOverride directly if provided (live preview from editor)
     let template = templateOverride || null;
 
-    // Only look up by ID if no override was provided
+    // Only look up by ID if no override provided
     if (!template && templateId) {
       template = await getTemplate(templateId);
     }
@@ -53,11 +69,11 @@ router.post('/preview', async (req, res) => {
 
     const html = buildHTML(template, {
       recipientName: recipientName || 'Student Name',
-      dateFrom: dateFrom || '',
-      dateTo: dateTo || '',
+      dateFrom:      dateFrom  || '',
+      dateTo:        dateTo    || '',
       customBody,
       courseName: req.body.courseName || 'Your Course',
-      usnId: req.body.usnId || ''
+      usnId:      req.body.usnId      || ''
     });
 
     res.setHeader('Content-Type', 'text/html');
@@ -71,6 +87,7 @@ router.post('/preview', async (req, res) => {
 router.post('/generate', async (req, res) => {
   try {
     const { templateId, recipientName, dateFrom, dateTo, customBody } = req.body;
+
     let template = await getTemplate(templateId);
     if (!template) return res.status(404).json({ error: 'Template not found' });
 
@@ -79,34 +96,33 @@ router.post('/generate', async (req, res) => {
       dateFrom,
       dateTo,
       customBody,
-      courseName: req.body.courseName,
-      usnId: req.body.usnId
+      courseName: req.body.courseName || '',
+      usnId:      req.body.usnId      || ''
     });
 
-    const filename = `cert_${(recipientName || 'cert').replace(/\s+/g, '_')}_${uuidv4().slice(0,8)}.pdf`;
+    const safeName = (recipientName || 'cert').replace(/\s+/g, '_');
+    const filename = `cert_${safeName}_${uuidv4().slice(0, 8)}.pdf`;
 
     if (!htmlPdf) {
-      // Fallback: return HTML
-      const filePath = path.join(__dirname, '../output', filename.replace('.pdf', '.html'));
+      // Fallback: return HTML file
+      const outDir  = path.join(__dirname, '../output');
+      fs.mkdirSync(outDir, { recursive: true });
+      const filePath = path.join(outDir, filename.replace('.pdf', '.html'));
       fs.writeFileSync(filePath, html);
-      return res.json({ success: true, url: `/output/${filename.replace('.pdf', '.html')}`, type: 'html' });
+      return res.json({
+        success: true,
+        url: `/output/${filename.replace('.pdf', '.html')}`,
+        type: 'html'
+      });
     }
 
-    const options = {
-      format: null,
-      width: '1122px',
-      height: '794px',
-      printBackground: true,
-      margin: { top: '0px', bottom: '0px', left: '0px', right: '0px' }
-    }
-    const file = { content: html }
-    const pdfBuffer = await htmlPdf.generatePdf(file, options)
+    const pdfBuffer = await htmlPdf.generatePdf({ content: html }, PDF_OPTIONS);
 
     if (Certificate) {
       const mongoose = require('mongoose');
       const isValidObjectId = mongoose.Types.ObjectId.isValid(templateId);
       const cert = new Certificate({
-        templateId: isValidObjectId ? templateId : null,
+        templateId:         isValidObjectId  ? templateId : null,
         prebuiltTemplateId: !isValidObjectId ? templateId : null,
         recipientName,
         dateFrom,
@@ -127,7 +143,7 @@ router.post('/generate', async (req, res) => {
   }
 });
 
-// GET all certificates
+// GET /api/certificates — history
 router.get('/', async (req, res) => {
   try {
     if (Certificate) {

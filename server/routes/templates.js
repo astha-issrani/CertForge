@@ -4,7 +4,7 @@ const { PREBUILT_TEMPLATES } = require('../data/prebuiltTemplates');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
-const { createWorker } = require('tesseract.js');
+
 
 const upload = multer({
   dest: path.join(__dirname, '../uploads/templates/'),
@@ -48,37 +48,23 @@ router.post('/upload-image', upload.single('image'), async (req, res) => {
     if (!req.file) return res.status(400).json({ error: 'No image uploaded' });
 
     const imagePath = req.file.path;
-    const worker = await createWorker('eng');
-    const { data } = await worker.recognize(imagePath, {}, {
-      blocks: true,
-      layoutBlocks: true
-    });
-    await worker.terminate();
-
-    const blocks = data.blocks
-      .filter(b => b.text.trim().length > 0)
-      .map((b, i) => ({
-        id: `block_${i}`,
-        text: b.text.trim(),
-        bbox: b.bbox,
-        confidence: b.confidence,
-        fontSize: Math.round((b.bbox.y1 - b.bbox.y0) * 0.8),
-        fontStyle: b.text === b.text.toUpperCase() ? 'bold' : 'normal'
-      }));
-
     const imageBuffer = fs.readFileSync(imagePath);
     const base64Image = `data:${req.file.mimetype};base64,${imageBuffer.toString('base64')}`;
 
-const sizeOf = require('image-size');
-const dimensions = sizeOf(imagePath);
-const width = dimensions.width;
-const height = dimensions.height;
+    const sizeOf = require('image-size');
+    const dimensions = sizeOf(imagePath);
 
     fs.unlinkSync(imagePath);
 
-    res.json({ success: true, base64Image, width, height, blocks });
+    res.json({
+      success: true,
+      base64Image,
+      width: dimensions.width,
+      height: dimensions.height,
+      blocks: []  // no OCR, user adds blocks manually
+    });
   } catch (err) {
-    console.error('OCR error:', err);
+    console.error('Upload error:', err);
     res.status(500).json({ error: err.message });
   }
 });

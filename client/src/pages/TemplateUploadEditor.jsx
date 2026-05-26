@@ -1,190 +1,157 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
-import { Upload, Save, Type, Palette, Image, QrCode, Move, Trash2, Plus, ChevronLeft, Eye, Download } from 'lucide-react'
+import { useState, useRef, useCallback } from 'react'
+import { Upload, Save, Trash2, Plus, ChevronLeft, QrCode, Image as ImageIcon, Type, AlignCenter, AlignLeft, AlignRight, Eye, EyeOff } from 'lucide-react'
 import axios from 'axios'
 
-// ─── Helpers ────────────────────────────────────────────────────────────────
 const uid = () => Math.random().toString(36).slice(2, 9)
 
 const FIELD_TYPES = [
-  { value: 'static',    label: 'Static Text' },
-  { value: 'name',      label: 'Recipient Name' },
-  { value: 'course',    label: 'Course Name' },
-  { value: 'usn',       label: 'USN / ID' },
-  { value: 'dateFrom',  label: 'Date From' },
-  { value: 'dateTo',    label: 'Date To' },
-  { value: 'body',      label: 'Body Text' },
-  { value: 'qr',        label: 'QR Code (URL)' },
-  { value: 'image',     label: 'Image / Logo' },
+  { value: 'static',   label: 'Static Text' },
+  { value: 'name',     label: '{Recipient Name}' },
+  { value: 'course',   label: '{Course Name}' },
+  { value: 'usn',      label: '{USN / ID}' },
+  { value: 'dateFrom', label: '{Date From}' },
+  { value: 'dateTo',   label: '{Date To}' },
+  { value: 'body',     label: '{Body Text}' },
+  { value: 'qr',       label: 'QR Code (URL)' },
+  { value: 'image',    label: 'Image / Logo' },
 ]
 
-const PLACEHOLDER_MAP = {
-  name:     '{name}',
-  course:   '{courseName}',
-  usn:      '{usnId}',
-  dateFrom: '{dateFrom}',
-  dateTo:   '{dateTo}',
-  body:     '{body}',
+const PLACEHOLDER_LABELS = {
+  name: 'Recipient Name', course: 'Course Name', usn: 'USN/ID',
+  dateFrom: 'Date From', dateTo: 'Date To', body: 'Body Text',
 }
 
-// ─── Main Component ──────────────────────────────────────────────────────────
+const FONTS = ['Georgia', 'Times New Roman', 'Arial', 'Helvetica', 'Palatino Linotype', 'Garamond', 'Verdana', 'Courier New', 'Trebuchet MS']
+
 export default function TemplateUploadEditor({ onBack }) {
-  const canvasRef       = useRef(null)
-  const fileRef         = useRef(null)
-  const imgRef          = useRef(null)
+  const canvasRef   = useRef(null)
+  const fileRef     = useRef(null)
+  const imgFileRef  = useRef(null)
 
-  const [stage, setStage]           = useState('upload') // upload | edit | saving
-  const [bgImage, setBgImage]       = useState(null)      // base64 string
-  const [imgDims, setImgDims]       = useState({ w: 1122, h: 794 })
-  const [blocks, setBlocks]         = useState([])        // OCR / user-added blocks
-  const [selected, setSelected]     = useState(null)      // selected block id
-  const [ocrLoading, setOcrLoading] = useState(false)
+  const [stage, setStage]         = useState('upload')
+  const [bgImage, setBgImage]     = useState(null)
+  const [imgDims, setImgDims]     = useState({ w: 1122, h: 794 })
+  const [blocks, setBlocks]       = useState([])
+  const [selected, setSelected]   = useState(null)
+  const [uploading, setUploading] = useState(false)
   const [templateName, setTemplateName] = useState('My Custom Template')
-  const [dragging, setDragging]     = useState(null)      // { id, startX, startY, origX, origY }
-  const [resizing, setResizing]     = useState(null)
+  const [dragging, setDragging]   = useState(null)
+  const [resizing, setResizing]   = useState(null)
   const [saveStatus, setSaveStatus] = useState('')
-  const [tab, setTab]               = useState('blocks')  // blocks | style | qr
+  const [tab, setTab]             = useState('style')
 
-  const SCALE = 0.6  // canvas display scale
+  const SCALE = Math.min(0.55, (window.innerWidth - 320) / 1122)
 
-  // ── Upload & OCR ──────────────────────────────────────────────────────────
+  const selectedBlock = blocks.find(b => b.id === selected)
+  const updateBlock = (id, patch) => setBlocks(bs => bs.map(b => b.id === id ? { ...b, ...patch } : b))
+  const deleteBlock = (id) => { setBlocks(bs => bs.filter(b => b.id !== id)); if (selected === id) setSelected(null) }
+
+  // Upload image
   const handleImageUpload = async (file) => {
     if (!file) return
-    setOcrLoading(true)
-
-    // preview instantly
+    setUploading(true)
     const reader = new FileReader()
-    reader.onload = (e) => setBgImage(e.target.result)
+    reader.onload = e => setBgImage(e.target.result)
     reader.readAsDataURL(file)
-
     try {
       const fd = new FormData()
       fd.append('image', file)
-      const { data } = await axios.post('/api/templates/upload-image', fd, {
-        headers: { 'Content-Type': 'multipart/form-data' }
-      })
-
+      const { data } = await axios.post('/api/templates/upload-image', fd)
       setImgDims({ w: data.width, h: data.height })
       setBgImage(data.base64Image)
-
-      // Map OCR blocks to editor blocks
-      const mapped = data.blocks.map(b => ({
-        id: uid(),
-        text: b.text,
-        fieldType: 'static',
-        x: b.bbox.x0,
-        y: b.bbox.y0,
-        width:  b.bbox.x1 - b.bbox.x0,
-        height: b.bbox.y1 - b.bbox.y0,
-        fontSize: Math.max(12, Math.round((b.bbox.y1 - b.bbox.y0) * 0.75)),
-        fontFamily: 'Georgia',
-        color: '#1a1a4e',
-        bold: b.fontStyle === 'bold',
-        italic: false,
-        align: 'center',
-        visible: true,
-      }))
-      setBlocks(mapped)
       setStage('edit')
     } catch (err) {
-      alert('OCR failed: ' + err.message + '\nYou can still add text blocks manually.')
-      setBlocks([])
-      setStage('edit')
+      alert('Upload failed: ' + err.message)
     }
-    setOcrLoading(false)
+    setUploading(false)
   }
 
-  // ── Block helpers ─────────────────────────────────────────────────────────
-  const selectedBlock = blocks.find(b => b.id === selected)
-
-  const updateBlock = (id, patch) =>
-    setBlocks(bs => bs.map(b => b.id === id ? { ...b, ...patch } : b))
-
-  const deleteBlock = (id) => {
-    setBlocks(bs => bs.filter(b => b.id !== id))
-    if (selected === id) setSelected(null)
-  }
-
-  const addBlock = () => {
+  // Click on canvas to add block
+  const handleCanvasClick = (e) => {
+    if (dragging || resizing) return
+    if (e.target !== canvasRef.current) return
+    const rect = canvasRef.current.getBoundingClientRect()
+    const x = (e.clientX - rect.left) / SCALE
+    const y = (e.clientY - rect.top) / SCALE
     const nb = {
-      id: uid(),
-      text: 'New Text',
-      fieldType: 'static',
-      x: 100, y: 100, width: 300, height: 40,
-      fontSize: 18, fontFamily: 'Georgia',
-      color: '#1a1a4e',
+      id: uid(), text: 'New Text', fieldType: 'static',
+      x: x - 100, y: y - 20, width: 200, height: 40,
+      fontSize: 24, fontFamily: 'Georgia', color: '#1a1a4e',
       bold: false, italic: false, align: 'center', visible: true,
     }
     setBlocks(bs => [...bs, nb])
     setSelected(nb.id)
+    setTab('style')
   }
 
   const addQR = () => {
     const nb = {
-      id: uid(),
-      text: 'https://example.com',
-      fieldType: 'qr',
-      x: 200, y: 200, width: 100, height: 100,
-      fontSize: 14, fontFamily: 'Georgia',
-      color: '#000000', bold: false, italic: false, align: 'center', visible: true,
+      id: uid(), text: 'https://example.com', fieldType: 'qr',
+      x: 50, y: 50, width: 100, height: 100,
+      fontSize: 14, fontFamily: 'Georgia', color: '#000',
+      bold: false, italic: false, align: 'center', visible: true,
     }
     setBlocks(bs => [...bs, nb])
     setSelected(nb.id)
+    setTab('style')
   }
 
-  // ── Mouse drag on canvas ──────────────────────────────────────────────────
-  const getCanvasCoords = (e) => {
-    const rect = canvasRef.current.getBoundingClientRect()
-    return {
-      cx: (e.clientX - rect.left) / SCALE,
-      cy: (e.clientY - rect.top)  / SCALE,
+  const addImageBlock = (file) => {
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = e => {
+      const nb = {
+        id: uid(), text: e.target.result, fieldType: 'image',
+        x: 50, y: 50, width: 150, height: 80,
+        fontSize: 14, fontFamily: 'Georgia', color: '#000',
+        bold: false, italic: false, align: 'center', visible: true,
+      }
+      setBlocks(bs => [...bs, nb])
+      setSelected(nb.id)
+      setTab('style')
     }
+    reader.readAsDataURL(file)
+  }
+
+  // Drag logic
+  const getXY = (e) => {
+    const rect = canvasRef.current.getBoundingClientRect()
+    return { cx: (e.clientX - rect.left) / SCALE, cy: (e.clientY - rect.top) / SCALE }
   }
 
   const onMouseDown = (e, id, mode = 'move') => {
     e.stopPropagation()
     setSelected(id)
+    setTab('style')
     const block = blocks.find(b => b.id === id)
-    const { cx, cy } = getCanvasCoords(e)
-    if (mode === 'move') {
-      setDragging({ id, startX: cx, startY: cy, origX: block.x, origY: block.y })
-    } else {
-      setResizing({ id, startX: cx, startY: cy, origW: block.width, origH: block.height })
-    }
+    const { cx, cy } = getXY(e)
+    if (mode === 'move') setDragging({ id, startX: cx, startY: cy, origX: block.x, origY: block.y })
+    else setResizing({ id, startX: cx, startY: cy, origW: block.width, origH: block.height })
   }
 
   const onMouseMove = useCallback((e) => {
+    if (!canvasRef.current) return
     if (dragging) {
-      const { cx, cy } = getCanvasCoords(e)
-      const dx = cx - dragging.startX
-      const dy = cy - dragging.startY
-      updateBlock(dragging.id, { x: dragging.origX + dx, y: dragging.origY + dy })
+      const { cx, cy } = getXY(e)
+      updateBlock(dragging.id, { x: dragging.origX + cx - dragging.startX, y: dragging.origY + cy - dragging.startY })
     }
     if (resizing) {
-      const { cx, cy } = getCanvasCoords(e)
-      const dw = cx - resizing.startX
-      const dh = cy - resizing.startY
+      const { cx, cy } = getXY(e)
       updateBlock(resizing.id, {
-        width:  Math.max(40, resizing.origW + dw),
-        height: Math.max(20, resizing.origH + dh),
+        width: Math.max(40, resizing.origW + cx - resizing.startX),
+        height: Math.max(20, resizing.origH + cy - resizing.startY),
       })
     }
-  }, [dragging, resizing])
+  }, [dragging, resizing, blocks])
 
-  const onMouseUp = useCallback(() => {
-    setDragging(null)
-    setResizing(null)
-  }, [])
+  const onMouseUp = useCallback(() => { setDragging(null); setResizing(null) }, [])
 
-  // ── Save template ─────────────────────────────────────────────────────────
   const handleSave = async () => {
     setSaveStatus('saving')
     try {
       await axios.post('/api/templates/save-custom', {
-        name: templateName,
-        base64Image: bgImage,
-        width: imgDims.w,
-        height: imgDims.h,
-        blocks,
+        name: templateName, base64Image: bgImage,
+        width: imgDims.w, height: imgDims.h, blocks,
       })
       setSaveStatus('saved')
       setTimeout(() => { if (onBack) onBack() }, 1200)
@@ -194,328 +161,214 @@ export default function TemplateUploadEditor({ onBack }) {
     }
   }
 
-  // ── Render ────────────────────────────────────────────────────────────────
-  if (stage === 'upload') {
-    return (
-      <div style={styles.uploadPage}>
-        <div style={styles.uploadCard}>
-          <div style={styles.uploadIcon}>
-            <Upload size={36} color="#4a90e2" />
-          </div>
-          <h2 style={styles.uploadTitle}>Upload Certificate Template</h2>
-          <p style={styles.uploadSub}>
-            Upload a certificate image (PNG or JPG). We'll use OCR to detect all text regions automatically, then you can edit every element.
-          </p>
-          <div
-            style={styles.dropZone}
-            onClick={() => fileRef.current?.click()}
-            onDragOver={e => { e.preventDefault(); e.currentTarget.style.borderColor = '#4a90e2' }}
-            onDragLeave={e => { e.currentTarget.style.borderColor = '#ddd' }}
-            onDrop={e => { e.preventDefault(); handleImageUpload(e.dataTransfer.files[0]) }}
-          >
-            <input ref={fileRef} type="file" accept="image/*" style={{ display: 'none' }}
-              onChange={e => handleImageUpload(e.target.files[0])} />
-            {ocrLoading ? (
-              <div style={styles.ocrLoading}>
-                <div style={styles.spinner} />
-                <p style={{ marginTop: 12, color: '#555' }}>Scanning text with OCR...</p>
-              </div>
-            ) : (
-              <>
-                <div style={{ fontSize: 48 }}>🖼️</div>
-                <div style={styles.dropText}>Drop image here or click to browse</div>
-                <div style={styles.dropSub}>PNG, JPG supported • Max 10MB</div>
-              </>
-            )}
-          </div>
-          {onBack && (
-            <button style={styles.backBtn} onClick={onBack}>
-              <ChevronLeft size={16} /> Back to Templates
-            </button>
-          )}
+  // ── Upload screen ──
+  if (stage === 'upload') return (
+    <div style={S.page}>
+      <div style={S.uploadCard}>
+        <div style={S.uploadIconWrap}><Upload size={32} color="#4a90e2" /></div>
+        <h2 style={S.uploadTitle}>Upload Your Certificate Template</h2>
+        <p style={S.uploadSub}>Upload a PNG or JPG of your certificate design. You'll then place text, images, and QR codes exactly where you want them.</p>
+        <div style={S.dropZone}
+          onClick={() => fileRef.current?.click()}
+          onDragOver={e => { e.preventDefault(); e.currentTarget.style.borderColor = '#4a90e2' }}
+          onDragLeave={e => { e.currentTarget.style.borderColor = '#334' }}
+          onDrop={e => { e.preventDefault(); handleImageUpload(e.dataTransfer.files[0]) }}>
+          <input ref={fileRef} type="file" accept="image/*" style={{ display: 'none' }}
+            onChange={e => handleImageUpload(e.target.files[0])} />
+          {uploading
+            ? <><div style={S.spinner} /><p style={{ color: '#aaa', marginTop: 12 }}>Uploading...</p></>
+            : <><div style={{ fontSize: 48 }}>🖼️</div>
+               <div style={S.dropTitle}>Drop image here or click to browse</div>
+               <div style={S.dropSub}>PNG, JPG • Max 10MB</div></>}
         </div>
+        {onBack && <button style={S.backBtn} onClick={onBack}><ChevronLeft size={14}/> Back</button>}
       </div>
-    )
-  }
+    </div>
+  )
 
   const cW = imgDims.w * SCALE
   const cH = imgDims.h * SCALE
 
   return (
-    <div style={styles.editorPage} onMouseMove={onMouseMove} onMouseUp={onMouseUp}>
-      {/* ── Top bar ── */}
-      <div style={styles.topBar}>
-        {onBack && (
-          <button style={styles.topBtn} onClick={onBack}>
-            <ChevronLeft size={16} /> Back
-          </button>
-        )}
-        <input
-          style={styles.nameInput}
-          value={templateName}
-          onChange={e => setTemplateName(e.target.value)}
-          placeholder="Template name..."
-        />
-        <div style={{ display: 'flex', gap: 8 }}>
-          <button style={styles.topBtn} onClick={addBlock}>
-            <Plus size={15} /> Add Text
-          </button>
-          <button style={styles.topBtn} onClick={addQR}>
-            <QrCode size={15} /> Add QR
-          </button>
-          <button
-            style={{ ...styles.topBtn, ...styles.saveBtn,
-              background: saveStatus === 'saved' ? '#22c55e' : '#4a90e2' }}
-            onClick={handleSave}
-            disabled={saveStatus === 'saving'}
-          >
-            <Save size={15} />
-            {saveStatus === 'saving' ? 'Saving...' : saveStatus === 'saved' ? 'Saved!' : 'Save Template'}
+    <div style={S.editor} onMouseMove={onMouseMove} onMouseUp={onMouseUp}>
+      {/* Top bar */}
+      <div style={S.topBar}>
+        {onBack && <button style={S.iconBtn} onClick={onBack}><ChevronLeft size={16}/> Back</button>}
+        <input style={S.nameInput} value={templateName} onChange={e => setTemplateName(e.target.value)} placeholder="Template name..." />
+        <div style={{ display:'flex', gap:6 }}>
+          <button style={S.iconBtn} onClick={() => setStage('upload')} title="Change image">🖼️ Change Image</button>
+          <button style={S.iconBtn} onClick={addQR}><QrCode size={14}/> QR Code</button>
+          <button style={S.iconBtn} onClick={() => imgFileRef.current?.click()}><ImageIcon size={14}/> Add Image</button>
+          <input ref={imgFileRef} type="file" accept="image/*" style={{ display:'none' }} onChange={e => addImageBlock(e.target.files[0])} />
+          <button style={{ ...S.iconBtn, background: saveStatus==='saved'?'#22c55e':'#4a90e2', color:'#fff', border:'none' }}
+            onClick={handleSave} disabled={saveStatus==='saving'}>
+            <Save size={14}/> {saveStatus==='saving'?'Saving...':saveStatus==='saved'?'Saved! ✓':'Save Template'}
           </button>
         </div>
       </div>
 
-      <div style={styles.editorBody}>
-        {/* ── Canvas ── */}
-        <div style={styles.canvasWrap}>
-          <div
-            ref={canvasRef}
-            style={{ ...styles.canvas, width: cW, height: cH }}
-            onClick={() => setSelected(null)}
-          >
-            {/* Background image */}
-            {bgImage && (
-              <img
-                ref={imgRef}
-                src={bgImage}
-                style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', objectFit: 'fill', pointerEvents: 'none' }}
-                alt="template"
-              />
-            )}
-
-            {/* Blocks */}
-            {blocks.filter(b => b.visible).map(b => (
-              <div
-                key={b.id}
+      <div style={S.body}>
+        {/* Canvas */}
+        <div style={S.canvasArea}>
+          <div style={S.canvasHint}>💡 Click anywhere on the certificate to add a text block</div>
+          <div ref={canvasRef} style={{ ...S.canvas, width: cW, height: cH }} onClick={handleCanvasClick}>
+            {bgImage && <img src={bgImage} style={S.bgImg} alt="template" draggable={false} />}
+            {blocks.filter(b => b.visible !== false).map(b => (
+              <div key={b.id}
                 style={{
-                  position: 'absolute',
-                  left: b.x * SCALE,
-                  top: b.y * SCALE,
-                  width: b.width * SCALE,
-                  height: b.height * SCALE,
-                  border: selected === b.id ? '2px solid #4a90e2' : '1px dashed rgba(74,144,226,0.4)',
-                  cursor: 'move',
-                  boxSizing: 'border-box',
-                  background: selected === b.id ? 'rgba(74,144,226,0.08)' : 'transparent',
+                  position:'absolute', left: b.x*SCALE, top: b.y*SCALE,
+                  width: b.width*SCALE, height: b.height*SCALE,
+                  border: selected===b.id ? '2px solid #4a90e2' : '1px dashed rgba(74,144,226,0.5)',
+                  cursor:'move', boxSizing:'border-box',
+                  background: selected===b.id ? 'rgba(74,144,226,0.07)' : 'transparent',
                 }}
                 onMouseDown={e => onMouseDown(e, b.id, 'move')}
               >
                 {b.fieldType === 'qr' ? (
-                  <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: '#555' }}>
-                    QR: {b.text.substring(0, 20)}
+                  <div style={{ width:'100%', height:'100%', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center' }}>
+                    <img src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(b.text)}`}
+                      style={{ width:'80%', height:'80%', objectFit:'contain' }} alt="QR" />
                   </div>
+                ) : b.fieldType === 'image' ? (
+                  <img src={b.text} style={{ width:'100%', height:'100%', objectFit:'contain' }} alt="img" draggable={false} />
                 ) : (
                   <div style={{
-                    width: '100%', height: '100%',
-                    fontSize: b.fontSize * SCALE,
-                    fontFamily: b.fontFamily,
-                    color: b.color,
-                    fontWeight: b.bold ? 'bold' : 'normal',
-                    fontStyle: b.italic ? 'italic' : 'normal',
-                    textAlign: b.align,
-                    display: 'flex', alignItems: 'center', justifyContent:
-                      b.align === 'left' ? 'flex-start' : b.align === 'right' ? 'flex-end' : 'center',
-                    overflow: 'hidden', userSelect: 'none', pointerEvents: 'none',
-                    padding: '0 2px',
+                    width:'100%', height:'100%', fontSize: b.fontSize*SCALE,
+                    fontFamily: b.fontFamily, color: b.color,
+                    fontWeight: b.bold?'bold':'normal', fontStyle: b.italic?'italic':'normal',
+                    textAlign: b.align, display:'flex', alignItems:'center',
+                    justifyContent: b.align==='left'?'flex-start':b.align==='right'?'flex-end':'center',
+                    overflow:'hidden', userSelect:'none', pointerEvents:'none', padding:'0 2px',
                   }}>
-                    {PLACEHOLDER_MAP[b.fieldType] || b.text}
+                    {PLACEHOLDER_LABELS[b.fieldType] ? `[${PLACEHOLDER_LABELS[b.fieldType]}]` : b.text}
                   </div>
                 )}
-                {/* Resize handle */}
-                {selected === b.id && (
-                  <div
-                    style={styles.resizeHandle}
-                    onMouseDown={e => onMouseDown(e, b.id, 'resize')}
-                  />
+                {selected===b.id && (
+                  <div style={S.resizeHandle} onMouseDown={e => onMouseDown(e, b.id, 'resize')} />
                 )}
               </div>
             ))}
-          </div>
-          <div style={styles.canvasHint}>
-            Click a block to select • Drag to move • Drag corner to resize
           </div>
         </div>
 
-        {/* ── Side panel ── */}
-        <div style={styles.sidePanel}>
-          {/* Tabs */}
-          <div style={styles.tabs}>
-            {['blocks', 'style'].map(t => (
-              <button key={t} style={{ ...styles.tab, ...(tab === t ? styles.tabActive : {}) }}
-                onClick={() => setTab(t)}>
-                {t === 'blocks' ? '📝 Blocks' : '🎨 Style'}
+        {/* Side panel */}
+        <div style={S.panel}>
+          <div style={S.tabs}>
+            {['blocks','style'].map(t => (
+              <button key={t} style={{ ...S.tab, ...(tab===t?S.tabOn:{}) }} onClick={() => setTab(t)}>
+                {t==='blocks'?'📋 All Blocks':'✏️ Edit Selected'}
               </button>
             ))}
           </div>
 
-          {tab === 'blocks' && (
-            <div style={styles.panelContent}>
-              {/* Block list */}
-              <div style={styles.blockList}>
-                {blocks.map((b, i) => (
-                  <div
-                    key={b.id}
-                    style={{ ...styles.blockItem, ...(selected === b.id ? styles.blockItemActive : {}) }}
-                    onClick={() => setSelected(b.id)}
-                  >
-                    <span style={{ fontSize: 12, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {b.fieldType !== 'static' ? `[${b.fieldType}]` : b.text.substring(0, 24)}
+          {/* Blocks list */}
+          {tab==='blocks' && (
+            <div style={S.panelBody}>
+              <button style={S.addBtn} onClick={() => {
+                const nb = { id:uid(), text:'New Text', fieldType:'static', x:100, y:100, width:200, height:40,
+                  fontSize:24, fontFamily:'Georgia', color:'#1a1a4e', bold:false, italic:false, align:'center', visible:true }
+                setBlocks(bs => [...bs, nb]); setSelected(nb.id); setTab('style')
+              }}><Plus size={14}/> Add Text Block</button>
+              {blocks.length === 0
+                ? <div style={S.empty}>Click on the canvas to add text blocks, or use the buttons above</div>
+                : blocks.map(b => (
+                  <div key={b.id} style={{ ...S.blockRow, ...(selected===b.id?S.blockRowOn:{}) }}
+                    onClick={() => { setSelected(b.id); setTab('style') }}>
+                    <span style={{ fontSize:11, flex:1, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', color:'#ccd' }}>
+                      {b.fieldType!=='static'&&b.fieldType!=='qr'&&b.fieldType!=='image'
+                        ? `[${PLACEHOLDER_LABELS[b.fieldType]||b.fieldType}]`
+                        : b.fieldType==='qr' ? `QR: ${b.text.substring(0,20)}`
+                        : b.fieldType==='image' ? '🖼️ Image'
+                        : b.text.substring(0,28)}
                     </span>
-                    <button style={styles.delBtn} onClick={e => { e.stopPropagation(); deleteBlock(b.id) }}>
-                      <Trash2 size={12} />
-                    </button>
+                    <button style={{ background:'none', border:'none', cursor:'pointer', color:'#ef4444', padding:2 }}
+                      onClick={e => { e.stopPropagation(); deleteBlock(b.id) }}><Trash2 size={12}/></button>
                   </div>
-                ))}
-                {blocks.length === 0 && (
-                  <div style={{ color: '#aaa', fontSize: 13, padding: '20px 0', textAlign: 'center' }}>
-                    No blocks yet.<br />Click "+ Add Text" to start.
-                  </div>
-                )}
-              </div>
+                ))
+              }
             </div>
           )}
 
-          {tab === 'style' && selectedBlock && (
-            <div style={styles.panelContent}>
-              <div style={styles.fieldGroup}>
-                <label style={styles.label}>Field Type</label>
-                <select style={styles.select}
-                  value={selectedBlock.fieldType}
+          {/* Style editor */}
+          {tab==='style' && !selectedBlock && (
+            <div style={S.empty}>Click a block on the canvas or select from "All Blocks" to edit it</div>
+          )}
+          {tab==='style' && selectedBlock && (
+            <div style={S.panelBody}>
+              <Field label="Field Type">
+                <select style={S.select} value={selectedBlock.fieldType}
                   onChange={e => updateBlock(selected, { fieldType: e.target.value })}>
-                  {FIELD_TYPES.map(ft => (
-                    <option key={ft.value} value={ft.value}>{ft.label}</option>
-                  ))}
+                  {FIELD_TYPES.map(f => <option key={f.value} value={f.value}>{f.label}</option>)}
                 </select>
-              </div>
+              </Field>
 
-              {(selectedBlock.fieldType === 'static' || selectedBlock.fieldType === 'qr') && (
-                <div style={styles.fieldGroup}>
-                  <label style={styles.label}>
-                    {selectedBlock.fieldType === 'qr' ? 'URL for QR Code' : 'Text Content'}
-                  </label>
-                  <textarea style={styles.textarea}
+              {(selectedBlock.fieldType==='static'||selectedBlock.fieldType==='qr') && (
+                <Field label={selectedBlock.fieldType==='qr'?'URL for QR Code':'Text Content'}>
+                  <textarea style={{ ...S.input, height:60, resize:'vertical' }}
                     value={selectedBlock.text}
-                    onChange={e => updateBlock(selected, { text: e.target.value })}
-                    rows={3}
-                  />
-                </div>
+                    onChange={e => updateBlock(selected, { text: e.target.value })} />
+                </Field>
               )}
 
-              <div style={styles.row2}>
-                <div style={styles.fieldGroup}>
-                  <label style={styles.label}>X</label>
-                  <input style={styles.input} type="number"
-                    value={Math.round(selectedBlock.x)}
+              {selectedBlock.fieldType!=='qr' && selectedBlock.fieldType!=='image' && (<>
+                <div style={{ display:'flex', gap:8 }}>
+                  <Field label="Font Size" style={{ flex:1 }}>
+                    <input style={S.input} type="number" value={selectedBlock.fontSize}
+                      onChange={e => updateBlock(selected, { fontSize: +e.target.value })} />
+                  </Field>
+                  <Field label="Color" style={{ flex:1 }}>
+                    <input style={{ ...S.input, padding:2, height:34, cursor:'pointer' }} type="color"
+                      value={selectedBlock.color} onChange={e => updateBlock(selected, { color: e.target.value })} />
+                  </Field>
+                </div>
+                <Field label="Font">
+                  <select style={S.select} value={selectedBlock.fontFamily}
+                    onChange={e => updateBlock(selected, { fontFamily: e.target.value })}>
+                    {FONTS.map(f => <option key={f} value={f}>{f}</option>)}
+                  </select>
+                </Field>
+                <Field label="Style & Align">
+                  <div style={{ display:'flex', gap:6 }}>
+                    {[['B','bold',<b>B</b>],['I','italic',<i>I</i>]].map(([k,prop,label]) => (
+                      <button key={k} style={{ ...S.toggle, ...(selectedBlock[prop]?S.toggleOn:{}) }}
+                        onClick={() => updateBlock(selected, { [prop]: !selectedBlock[prop] })}>{label}</button>
+                    ))}
+                    {[['left',<AlignLeft size={13}/>],['center',<AlignCenter size={13}/>],['right',<AlignRight size={13}/>]].map(([a,icon]) => (
+                      <button key={a} style={{ ...S.toggle, ...(selectedBlock.align===a?S.toggleOn:{}) }}
+                        onClick={() => updateBlock(selected, { align: a })}>{icon}</button>
+                    ))}
+                    <button style={{ ...S.toggle, ...(selectedBlock.visible!==false?S.toggleOn:{}) }}
+                      onClick={() => updateBlock(selected, { visible: selectedBlock.visible===false })}>
+                      {selectedBlock.visible!==false?<Eye size={13}/>:<EyeOff size={13}/>}
+                    </button>
+                  </div>
+                </Field>
+              </>)}
+
+              <div style={{ display:'flex', gap:8 }}>
+                <Field label="X" style={{ flex:1 }}>
+                  <input style={S.input} type="number" value={Math.round(selectedBlock.x)}
                     onChange={e => updateBlock(selected, { x: +e.target.value })} />
-                </div>
-                <div style={styles.fieldGroup}>
-                  <label style={styles.label}>Y</label>
-                  <input style={styles.input} type="number"
-                    value={Math.round(selectedBlock.y)}
+                </Field>
+                <Field label="Y" style={{ flex:1 }}>
+                  <input style={S.input} type="number" value={Math.round(selectedBlock.y)}
                     onChange={e => updateBlock(selected, { y: +e.target.value })} />
-                </div>
+                </Field>
               </div>
-
-              <div style={styles.row2}>
-                <div style={styles.fieldGroup}>
-                  <label style={styles.label}>Width</label>
-                  <input style={styles.input} type="number"
-                    value={Math.round(selectedBlock.width)}
+              <div style={{ display:'flex', gap:8 }}>
+                <Field label="Width" style={{ flex:1 }}>
+                  <input style={S.input} type="number" value={Math.round(selectedBlock.width)}
                     onChange={e => updateBlock(selected, { width: +e.target.value })} />
-                </div>
-                <div style={styles.fieldGroup}>
-                  <label style={styles.label}>Height</label>
-                  <input style={styles.input} type="number"
-                    value={Math.round(selectedBlock.height)}
+                </Field>
+                <Field label="Height" style={{ flex:1 }}>
+                  <input style={S.input} type="number" value={Math.round(selectedBlock.height)}
                     onChange={e => updateBlock(selected, { height: +e.target.value })} />
-                </div>
+                </Field>
               </div>
 
-              {selectedBlock.fieldType !== 'qr' && (
-                <>
-                  <div style={styles.row2}>
-                    <div style={styles.fieldGroup}>
-                      <label style={styles.label}>Font Size</label>
-                      <input style={styles.input} type="number"
-                        value={selectedBlock.fontSize}
-                        onChange={e => updateBlock(selected, { fontSize: +e.target.value })} />
-                    </div>
-                    <div style={styles.fieldGroup}>
-                      <label style={styles.label}>Color</label>
-                      <input style={{ ...styles.input, padding: 2, height: 34, cursor: 'pointer' }}
-                        type="color" value={selectedBlock.color}
-                        onChange={e => updateBlock(selected, { color: e.target.value })} />
-                    </div>
-                  </div>
-
-                  <div style={styles.fieldGroup}>
-                    <label style={styles.label}>Font Family</label>
-                    <select style={styles.select}
-                      value={selectedBlock.fontFamily}
-                      onChange={e => updateBlock(selected, { fontFamily: e.target.value })}>
-                      {['Georgia', 'Times New Roman', 'Arial', 'Helvetica', 'Palatino Linotype', 'Garamond', 'Verdana', 'Courier New'].map(f => (
-                        <option key={f} value={f}>{f}</option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div style={styles.fieldGroup}>
-                    <label style={styles.label}>Alignment</label>
-                    <div style={{ display: 'flex', gap: 6 }}>
-                      {['left', 'center', 'right'].map(a => (
-                        <button key={a} style={{
-                          ...styles.alignBtn,
-                          ...(selectedBlock.align === a ? styles.alignBtnActive : {})
-                        }} onClick={() => updateBlock(selected, { align: a })}>
-                          {a === 'left' ? '⬅' : a === 'center' ? '↔' : '➡'}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
-                    <button style={{
-                      ...styles.toggleBtn,
-                      ...(selectedBlock.bold ? styles.toggleBtnActive : {})
-                    }} onClick={() => updateBlock(selected, { bold: !selectedBlock.bold })}>
-                      <b>B</b>
-                    </button>
-                    <button style={{
-                      ...styles.toggleBtn,
-                      ...(selectedBlock.italic ? styles.toggleBtnActive : {})
-                    }} onClick={() => updateBlock(selected, { italic: !selectedBlock.italic })}>
-                      <i>I</i>
-                    </button>
-                    <button style={{
-                      ...styles.toggleBtn,
-                      ...(selectedBlock.visible ? styles.toggleBtnActive : {})
-                    }} onClick={() => updateBlock(selected, { visible: !selectedBlock.visible })}>
-                      👁
-                    </button>
-                  </div>
-                </>
-              )}
-
-              <button style={{ ...styles.delBlockBtn }}
-                onClick={() => deleteBlock(selected)}>
-                <Trash2 size={14} /> Delete Block
+              <button style={S.delBtn} onClick={() => deleteBlock(selected)}>
+                <Trash2 size={13}/> Delete This Block
               </button>
-            </div>
-          )}
-
-          {tab === 'style' && !selectedBlock && (
-            <div style={{ color: '#aaa', fontSize: 13, padding: '30px 16px', textAlign: 'center' }}>
-              Select a block on the canvas to edit its style
             </div>
           )}
         </div>
@@ -524,52 +377,52 @@ export default function TemplateUploadEditor({ onBack }) {
   )
 }
 
-// ─── Styles ──────────────────────────────────────────────────────────────────
-const styles = {
-  uploadPage: { minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f8f9fc', padding: 24 },
-  uploadCard: { background: '#fff', borderRadius: 16, padding: 48, maxWidth: 520, width: '100%', boxShadow: '0 4px 24px rgba(0,0,0,0.08)', textAlign: 'center' },
-  uploadIcon: { width: 72, height: 72, borderRadius: '50%', background: 'rgba(74,144,226,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px' },
-  uploadTitle: { fontSize: 22, fontWeight: 700, color: '#1a1a4e', marginBottom: 8 },
-  uploadSub: { fontSize: 14, color: '#666', marginBottom: 24, lineHeight: 1.6 },
-  dropZone: { border: '2px dashed #ddd', borderRadius: 12, padding: '40px 24px', cursor: 'pointer', transition: 'border-color 0.2s', minHeight: 160, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8 },
-  dropText: { fontSize: 15, fontWeight: 600, color: '#333' },
-  dropSub: { fontSize: 12, color: '#999' },
-  ocrLoading: { display: 'flex', flexDirection: 'column', alignItems: 'center' },
-  spinner: { width: 32, height: 32, border: '3px solid #e0e0e0', borderTop: '3px solid #4a90e2', borderRadius: '50%', animation: 'spin 0.8s linear infinite' },
-  backBtn: { marginTop: 20, background: 'none', border: '1px solid #ddd', borderRadius: 8, padding: '8px 16px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: '#555', margin: '20px auto 0' },
+function Field({ label, children, style }) {
+  return (
+    <div style={{ marginBottom:10, ...style }}>
+      <div style={{ fontSize:10, color:'#778', textTransform:'uppercase', letterSpacing:0.5, marginBottom:4 }}>{label}</div>
+      {children}
+    </div>
+  )
+}
 
-  editorPage: { display: 'flex', flexDirection: 'column', height: '100vh', background: '#1a1a2e', userSelect: 'none' },
-  topBar: { display: 'flex', alignItems: 'center', gap: 12, padding: '10px 16px', background: '#16213e', borderBottom: '1px solid #0f3460', flexShrink: 0 },
-  nameInput: { flex: 1, background: '#0f3460', border: '1px solid #1a4a8a', borderRadius: 8, padding: '7px 12px', color: '#fff', fontSize: 14, outline: 'none' },
-  topBtn: { display: 'flex', alignItems: 'center', gap: 6, background: '#0f3460', border: '1px solid #1a4a8a', borderRadius: 8, padding: '7px 12px', color: '#a0c4ff', fontSize: 13, cursor: 'pointer', whiteSpace: 'nowrap' },
-  saveBtn: { color: '#fff', border: 'none' },
+const S = {
+  page: { minHeight:'100vh', display:'flex', alignItems:'center', justifyContent:'center', background:'#0d1117', padding:24 },
+  uploadCard: { background:'#161b22', borderRadius:16, padding:48, maxWidth:500, width:'100%', boxShadow:'0 4px 32px rgba(0,0,0,0.4)', textAlign:'center', border:'1px solid #30363d' },
+  uploadIconWrap: { width:64, height:64, borderRadius:'50%', background:'rgba(74,144,226,0.15)', display:'flex', alignItems:'center', justifyContent:'center', margin:'0 auto 16px' },
+  uploadTitle: { fontSize:20, fontWeight:700, color:'#e6edf3', marginBottom:8 },
+  uploadSub: { fontSize:13, color:'#8b949e', marginBottom:24, lineHeight:1.6 },
+  dropZone: { border:'2px dashed #30363d', borderRadius:12, padding:'40px 24px', cursor:'pointer', transition:'border-color 0.2s', minHeight:150, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:8 },
+  dropTitle: { fontSize:14, fontWeight:600, color:'#e6edf3' },
+  dropSub: { fontSize:12, color:'#8b949e' },
+  spinner: { width:28, height:28, border:'3px solid #30363d', borderTop:'3px solid #4a90e2', borderRadius:'50%', animation:'spin 0.8s linear infinite' },
+  backBtn: { marginTop:16, background:'none', border:'1px solid #30363d', borderRadius:8, padding:'7px 14px', cursor:'pointer', color:'#8b949e', fontSize:12, display:'flex', alignItems:'center', gap:4, margin:'16px auto 0' },
 
-  editorBody: { display: 'flex', flex: 1, overflow: 'hidden' },
-  canvasWrap: { flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', overflow: 'auto', padding: 24, gap: 10 },
-  canvas: { position: 'relative', background: '#fff', boxShadow: '0 8px 40px rgba(0,0,0,0.5)', overflow: 'hidden', flexShrink: 0 },
-  canvasHint: { fontSize: 11, color: '#555', textAlign: 'center' },
-  resizeHandle: { position: 'absolute', bottom: -4, right: -4, width: 10, height: 10, background: '#4a90e2', borderRadius: 2, cursor: 'se-resize', zIndex: 10 },
+  editor: { display:'flex', flexDirection:'column', height:'100vh', background:'#0d1117', userSelect:'none' },
+  topBar: { display:'flex', alignItems:'center', gap:8, padding:'8px 14px', background:'#161b22', borderBottom:'1px solid #30363d', flexShrink:0, flexWrap:'wrap' },
+  nameInput: { flex:1, minWidth:160, background:'#0d1117', border:'1px solid #30363d', borderRadius:8, padding:'6px 10px', color:'#e6edf3', fontSize:13, outline:'none' },
+  iconBtn: { display:'flex', alignItems:'center', gap:5, background:'#21262d', border:'1px solid #30363d', borderRadius:8, padding:'6px 10px', color:'#8b949e', fontSize:12, cursor:'pointer', whiteSpace:'nowrap' },
 
-  sidePanel: { width: 280, background: '#16213e', borderLeft: '1px solid #0f3460', display: 'flex', flexDirection: 'column', overflow: 'hidden' },
-  tabs: { display: 'flex', borderBottom: '1px solid #0f3460' },
-  tab: { flex: 1, padding: '10px 0', background: 'none', border: 'none', color: '#667', fontSize: 12, cursor: 'pointer' },
-  tabActive: { color: '#a0c4ff', borderBottom: '2px solid #4a90e2' },
-  panelContent: { flex: 1, overflowY: 'auto', padding: 12 },
+  body: { display:'flex', flex:1, overflow:'hidden' },
+  canvasArea: { flex:1, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'flex-start', overflow:'auto', padding:20, gap:8, background:'#0d1117' },
+  canvasHint: { fontSize:11, color:'#484f58', textAlign:'center' },
+  canvas: { position:'relative', background:'#fff', boxShadow:'0 0 0 1px #30363d, 0 8px 32px rgba(0,0,0,0.5)', overflow:'hidden', flexShrink:0, cursor:'crosshair' },
+  bgImg: { position:'absolute', top:0, left:0, width:'100%', height:'100%', objectFit:'fill', pointerEvents:'none', userSelect:'none' },
+  resizeHandle: { position:'absolute', bottom:-5, right:-5, width:12, height:12, background:'#4a90e2', borderRadius:2, cursor:'se-resize', zIndex:10, border:'2px solid #fff' },
 
-  blockList: { display: 'flex', flexDirection: 'column', gap: 4 },
-  blockItem: { display: 'flex', alignItems: 'center', padding: '7px 10px', borderRadius: 6, background: '#0f3460', cursor: 'pointer', border: '1px solid transparent' },
-  blockItemActive: { borderColor: '#4a90e2', background: '#1a4a8a' },
-  delBtn: { background: 'none', border: 'none', cursor: 'pointer', color: '#ef4444', padding: 2, display: 'flex', alignItems: 'center' },
+  panel: { width:270, background:'#161b22', borderLeft:'1px solid #30363d', display:'flex', flexDirection:'column', overflow:'hidden', flexShrink:0 },
+  tabs: { display:'flex', borderBottom:'1px solid #30363d' },
+  tab: { flex:1, padding:'9px 0', background:'none', border:'none', color:'#484f58', fontSize:11, cursor:'pointer' },
+  tabOn: { color:'#58a6ff', borderBottom:'2px solid #58a6ff' },
+  panelBody: { flex:1, overflowY:'auto', padding:12, display:'flex', flexDirection:'column', gap:2 },
+  addBtn: { display:'flex', alignItems:'center', gap:6, padding:'8px 10px', background:'rgba(88,166,255,0.1)', border:'1px solid rgba(88,166,255,0.3)', borderRadius:8, color:'#58a6ff', fontSize:12, cursor:'pointer', marginBottom:8 },
+  blockRow: { display:'flex', alignItems:'center', padding:'6px 8px', borderRadius:6, border:'1px solid transparent', cursor:'pointer', background:'#0d1117' },
+  blockRowOn: { borderColor:'#58a6ff', background:'#1c2128' },
+  empty: { color:'#484f58', fontSize:12, padding:'24px 16px', textAlign:'center', lineHeight:1.6 },
 
-  fieldGroup: { marginBottom: 10 },
-  label: { display: 'block', fontSize: 11, color: '#88a', marginBottom: 4, textTransform: 'uppercase', letterSpacing: 0.5 },
-  input: { width: '100%', background: '#0f3460', border: '1px solid #1a4a8a', borderRadius: 6, padding: '6px 8px', color: '#fff', fontSize: 13, outline: 'none', boxSizing: 'border-box' },
-  select: { width: '100%', background: '#0f3460', border: '1px solid #1a4a8a', borderRadius: 6, padding: '6px 8px', color: '#fff', fontSize: 13, outline: 'none' },
-  textarea: { width: '100%', background: '#0f3460', border: '1px solid #1a4a8a', borderRadius: 6, padding: '6px 8px', color: '#fff', fontSize: 13, outline: 'none', resize: 'vertical', boxSizing: 'border-box' },
-  row2: { display: 'flex', gap: 8 },
-  alignBtn: { flex: 1, padding: '6px 0', background: '#0f3460', border: '1px solid #1a4a8a', borderRadius: 6, color: '#88a', cursor: 'pointer', fontSize: 14 },
-  alignBtnActive: { background: '#1a4a8a', color: '#a0c4ff', borderColor: '#4a90e2' },
-  toggleBtn: { flex: 1, padding: '6px 0', background: '#0f3460', border: '1px solid #1a4a8a', borderRadius: 6, color: '#88a', cursor: 'pointer', fontSize: 14 },
-  toggleBtnActive: { background: '#1a4a8a', color: '#a0c4ff', borderColor: '#4a90e2' },
-  delBlockBtn: { display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, width: '100%', marginTop: 16, padding: '8px 0', background: 'rgba(239,68,68,0.15)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: 8, color: '#ef4444', cursor: 'pointer', fontSize: 13 },
+  input: { width:'100%', background:'#0d1117', border:'1px solid #30363d', borderRadius:6, padding:'6px 8px', color:'#e6edf3', fontSize:12, outline:'none', boxSizing:'border-box' },
+  select: { width:'100%', background:'#0d1117', border:'1px solid #30363d', borderRadius:6, padding:'6px 8px', color:'#e6edf3', fontSize:12, outline:'none' },
+  toggle: { flex:1, padding:'5px 0', background:'#0d1117', border:'1px solid #30363d', borderRadius:6, color:'#484f58', cursor:'pointer', fontSize:12, display:'flex', alignItems:'center', justifyContent:'center' },
+  toggleOn: { background:'#1c2128', color:'#58a6ff', borderColor:'#58a6ff' },
+  delBtn: { display:'flex', alignItems:'center', justifyContent:'center', gap:6, padding:'8px', background:'rgba(239,68,68,0.1)', border:'1px solid rgba(239,68,68,0.3)', borderRadius:8, color:'#ef4444', cursor:'pointer', fontSize:12, marginTop:8 },
 }

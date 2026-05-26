@@ -51,8 +51,8 @@ router.post('/upload-image', upload.single('image'), async (req, res) => {
     const imageBuffer = fs.readFileSync(imagePath);
     const base64Image = `data:${req.file.mimetype};base64,${imageBuffer.toString('base64')}`;
 
-    const sizeOf = require('image-size');
-    const dimensions = sizeOf(imagePath);
+    const { imageSize } = require('image-size');
+const dimensions = imageSize(imagePath);
 
     fs.unlinkSync(imagePath);
 

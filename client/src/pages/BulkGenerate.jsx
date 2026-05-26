@@ -43,51 +43,87 @@ export default function BulkGenerate() {
     if (f && (f.name.endsWith('.csv') || f.name.endsWith('.xlsx'))) handleFileChange(f)
   }
 
-  const handleGenerate = async () => {
-    if (!file) return alert('Please upload a CSV file')
-    if (!templateId) return alert('Please select a template')
-    setGenerating(true)
-    setProgress(0)
-    setResult(null)
+const handleGenerate = async () => {
+  if (!file) return alert('Please upload a CSV file')
+  if (!templateId) return alert('Please select a template')
+  setGenerating(true)
+  setProgress(0)
+  setResult(null)
 
-    // Simulate progress animation
-    const interval = setInterval(() => {
-      setProgress(p => Math.min(p + 5, 90))
-    }, 300)
+  const interval = setInterval(() => {
+    setProgress(p => Math.min(p + 3, 85))
+  }, 400)
 
-    try {
-      const fd = new FormData()
-      fd.append('csvFile', file)
-      fd.append('templateId', templateId)
-      const response = await axios.post('/api/bulk/generate', fd, {
-  responseType: 'blob'
-})
-clearInterval(interval)
-setProgress(100)
+  try {
+    const fd = new FormData()
+    fd.append('csvFile', file)
+    fd.append('templateId', templateId)
 
-const contentType = response.headers['content-type'] || ''
-if (contentType.includes('application/zip')) {
-  const blob = new Blob([response.data], { type: 'application/zip' })
-  const url = window.URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = `certificates_batch.zip`
-  document.body.appendChild(a)
-  a.click()
-  window.URL.revokeObjectURL(url)
-  document.body.removeChild(a)
-  setResult({ generated: 'All', total: 'All', errors: [] })
-} else {
-  const text = await response.data.text()
-  const json = JSON.parse(text)
-  setResult(json)
-}
-    } catch (e) {
-      clearInterval(interval)
-      alert('Generation failed: ' + (e.response?.data?.error || e.message))
+    // Get HTML for each certificate from server
+    const { data } = await axios.post('/api/bulk/generate-html', fd)
+    clearInterval(interval)
+
+    if (!data.htmlList?.length) throw new Error('No certificates generated')
+
+    // Generate PDFs in browser
+    const { jsPDF } = await import('jspdf')
+    const html2canvas = (await import('html2canvas')).default
+
+    const zip = await import('jszip').then(m => new m.default())
+    const results = []
+
+    for (let i = 0; i < data.htmlList.length; i++) {
+      const item = data.htmlList[i]
+      setProgress(85 + Math.round((i / data.htmlList.length) * 14))
+
+      try {
+        // Render HTML in hidden iframe
+        const iframe = document.createElement('iframe')
+        iframe.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:1122px;height:794px;border:none;'
+        document.body.appendChild(iframe)
+        iframe.contentDocument.open()
+        iframe.contentDocument.write(item.html)
+        iframe.contentDocument.close()
+        await new Promise(r => setTimeout(r, 800))
+
+        const canvas = await html2canvas(iframe.contentDocument.body, {
+          width: 1122, height: 794, scale: 1.5,
+          useCORS: true, allowTaint: true, logging: false
+        })
+        document.body.removeChild(iframe)
+
+        const imgData = canvas.toDataURL('image/jpeg', 0.92)
+        const pdf = new jsPDF({ orientation: 'landscape', unit: 'px', format: [1122, 794] })
+        pdf.addImage(imgData, 'JPEG', 0, 0, 1122, 794)
+
+        const pdfBlob = pdf.output('blob')
+        const filename = `cert_${item.name.replace(/\s+/g, '_')}_${i+1}.pdf`
+        zip.file(filename, pdfBlob)
+        results.push({ name: item.name, status: 'success' })
+      } catch (e) {
+        results.push({ name: item.name, status: 'error', error: e.message })
+      }
     }
-    setGenerating(false)
+
+    // Download ZIP
+    const zipBlob = await zip.generateAsync({ type: 'blob' })
+    const url = window.URL.createObjectURL(zipBlob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = 'certificates_batch.zip'
+    document.body.appendChild(a)
+    a.click()
+    window.URL.revokeObjectURL(url)
+    document.body.removeChild(a)
+
+    setProgress(100)
+    setResult({ generated: results.filter(r => r.status==='success').length, total: data.htmlList.length, errors: results.filter(r => r.status==='error'), results })
+  } catch (e) {
+    clearInterval(interval)
+    alert('Generation failed: ' + (e.response?.data?.error || e.message))
   }
+  setGenerating(false)
+}
 
   return (
     <div className="bulk-page">

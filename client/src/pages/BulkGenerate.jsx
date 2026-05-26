@@ -59,10 +59,29 @@ export default function BulkGenerate() {
       const fd = new FormData()
       fd.append('csvFile', file)
       fd.append('templateId', templateId)
-      const { data } = await axios.post('/api/bulk/generate', fd)
-      clearInterval(interval)
-      setProgress(100)
-      setResult(data)
+      const response = await axios.post('/api/bulk/generate', fd, {
+  responseType: 'blob'
+})
+clearInterval(interval)
+setProgress(100)
+
+const contentType = response.headers['content-type'] || ''
+if (contentType.includes('application/zip')) {
+  const blob = new Blob([response.data], { type: 'application/zip' })
+  const url = window.URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `certificates_batch.zip`
+  document.body.appendChild(a)
+  a.click()
+  window.URL.revokeObjectURL(url)
+  document.body.removeChild(a)
+  setResult({ generated: 'All', total: 'All', errors: [] })
+} else {
+  const text = await response.data.text()
+  const json = JSON.parse(text)
+  setResult(json)
+}
     } catch (e) {
       clearInterval(interval)
       alert('Generation failed: ' + (e.response?.data?.error || e.message))

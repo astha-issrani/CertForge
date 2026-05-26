@@ -49,19 +49,33 @@ export default function TemplateUploadEditor({ onBack }) {
   // Upload image
   const handleImageUpload = async (file) => {
     if (!file) return
+    if (!file.type.startsWith('image/')) {
+      alert('Please upload an image file (PNG, JPG, etc.)')
+      return
+    }
     setUploading(true)
-    const reader = new FileReader()
-    reader.onload = e => setBgImage(e.target.result)
-    reader.readAsDataURL(file)
     try {
-      const fd = new FormData()
-      fd.append('image', file)
-      const { data } = await axios.post('/api/templates/upload-image', fd)
-      setImgDims({ w: data.width, h: data.height })
-      setBgImage(data.base64Image)
+      // Read file entirely in the browser — no server round-trip, no buffer errors
+      const dataUrl = await new Promise((resolve, reject) => {
+        const reader = new FileReader()
+        reader.onload  = e => resolve(e.target.result)
+        reader.onerror = () => reject(new Error('Failed to read file'))
+        reader.readAsDataURL(file)
+      })
+
+      // Get real image dimensions from the browser
+      const dims = await new Promise((resolve) => {
+        const img = new Image()
+        img.onload  = () => resolve({ w: img.naturalWidth, h: img.naturalHeight })
+        img.onerror = () => resolve({ w: 1122, h: 794 })
+        img.src = dataUrl
+      })
+
+      setBgImage(dataUrl)
+      setImgDims(dims)
       setStage('edit')
     } catch (err) {
-      alert('Upload failed: ' + err.message)
+      alert('Failed to load image: ' + err.message)
     }
     setUploading(false)
   }

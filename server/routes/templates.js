@@ -2,13 +2,12 @@ const express = require('express');
 const router = express.Router();
 const { PREBUILT_TEMPLATES } = require('../data/prebuiltTemplates');
 const multer = require('multer');
-const path = require('path');
-const fs = require('fs');
+
 
 
 const upload = multer({
-  dest: path.join(__dirname, '../uploads/templates/'),
-  limits: { fileSize: 10 * 1024 * 1024 }
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 15 * 1024 * 1024 }
 });
 
 let Template;
@@ -46,22 +45,19 @@ router.post('/', async (req, res) => {
 router.post('/upload-image', upload.single('image'), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ error: 'No image uploaded' });
+    if (!req.file.buffer || req.file.buffer.length === 0) {
+      return res.status(400).json({ error: 'Empty file buffer' });
+    }
 
-    const imagePath = req.file.path;
-    const imageBuffer = fs.readFileSync(imagePath);
-    const base64Image = `data:${req.file.mimetype};base64,${imageBuffer.toString('base64')}`;
+    const base64Image = `data:${req.file.mimetype};base64,${req.file.buffer.toString('base64')}`;
 
-    const { imageSize } = require('image-size');
-const dimensions = imageSize(imagePath);
-
-    fs.unlinkSync(imagePath);
-
+    // Default dims — client will detect real dimensions from the loaded image
     res.json({
       success: true,
       base64Image,
-      width: dimensions.width,
-      height: dimensions.height,
-      blocks: []  // no OCR, user adds blocks manually
+      width: 1122,
+      height: 794,
+      blocks: []
     });
   } catch (err) {
     console.error('Upload error:', err);

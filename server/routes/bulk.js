@@ -179,4 +179,36 @@ router.post('/preview-csv', upload.single('csvFile'), async (req, res) => {
   }
 });
 
+// POST /api/bulk/generate-html - returns HTML for each certificate
+router.post('/generate-html', upload.single('csvFile'), async (req, res) => {
+  try {
+    const { templateId, templateOverride } = req.body;
+    if (!req.file) return res.status(400).json({ error: 'No CSV file uploaded' });
+
+    let template = templateOverride ? JSON.parse(templateOverride) : await getTemplate(templateId);
+    if (!template) return res.status(404).json({ error: 'Template not found' });
+
+    const fileContent = fs.readFileSync(req.file.path, 'utf-8');
+    const records = csv.parse(fileContent, { columns: true, skip_empty_lines: true, trim: true });
+    if (!records.length) return res.status(400).json({ error: 'CSV file is empty' });
+
+    try { fs.unlinkSync(req.file.path); } catch (e) {}
+
+    const htmlList = records.map((row, i) => {
+      const data = normalize(row);
+      try {
+        const html = buildHTML(template, data);
+        return { name: data.recipientName, html, index: i }
+      } catch (e) {
+        return { name: data.recipientName || `Row ${i+1}`, html: null, error: e.message }
+      }
+    }).filter(item => item.html);
+
+    res.json({ success: true, total: records.length, htmlList });
+  } catch (err) {
+    console.error('Bulk HTML error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;

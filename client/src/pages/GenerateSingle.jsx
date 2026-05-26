@@ -53,10 +53,32 @@ export default function GenerateSingle() {
     setGenerating(true)
     setResult(null)
     try {
-      const { data } = await axios.post('/api/certificates/generate', form)
-      setResult(data)
+      const response = await axios.post('/api/certificates/generate', form, {
+        responseType: 'blob'
+      })
+      
+      // Check if response is PDF or JSON error
+      const contentType = response.headers['content-type'] || ''
+      if (contentType.includes('application/json')) {
+        const text = await response.data.text()
+        const json = JSON.parse(text)
+        throw new Error(json.error || 'Generation failed')
+      }
+
+      // Create download link from blob
+      const blob = new Blob([response.data], { type: 'application/pdf' })
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `certificate_${form.recipientName.replace(/\s+/g, '_')}.pdf`
+      document.body.appendChild(a)
+      a.click()
+      window.URL.revokeObjectURL(url)
+      document.body.removeChild(a)
+
+      setResult({ success: true, filename: `certificate_${form.recipientName}.pdf` })
     } catch (e) {
-      alert('Generation failed: ' + e.message)
+      alert('Generation failed: ' + (e.response?.data?.error || e.message))
     }
     setGenerating(false)
   }
@@ -145,9 +167,7 @@ export default function GenerateSingle() {
                 <div className="result-title">Certificate Generated!</div>
                 <div className="result-sub">{result.filename || 'Certificate ready'}</div>
               </div>
-              <a href={result.url} download className="result-download">
-                <Download size={16} /> Download
-              </a>
+              <span style={{ fontSize: 12, color: '#4caf50' }}>✓ Downloaded</span>
             </div>
           )}
         </div>

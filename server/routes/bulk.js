@@ -8,10 +8,10 @@ const { v4: uuidv4 } = require('uuid');
 const { generateCertificateHTML, generatePersevexHTML, generateCustomHTML } = require('../utils/generateHTML');
 const { PREBUILT_TEMPLATES } = require('../data/prebuiltTemplates');
 
-let Template, Certificate, htmlPdf, archiver;
+let Template, Certificate, puppeteer, archiver;
 try { Template = require('../models/Template'); } catch (e) {}
 try { Certificate = require('../models/Certificate'); } catch (e) {}
-try { htmlPdf = require('html-pdf-node'); } catch (e) { console.log('html-pdf-node not available'); }
+try { puppeteer = require('puppeteer'); } catch (e) { console.log('puppeteer not available'); }
 try { archiver = require('archiver'); } catch (e) {}
 
 const upload = multer({ dest: path.join(__dirname, '../uploads/') });
@@ -33,14 +33,28 @@ function buildHTML(template, data) {
   return generateCertificateHTML(template, data);
 }
 
+async function launchBrowser() {
+  return await puppeteer.launch({
+    executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
+    args: [
+      '--no-sandbox',
+      '--disable-setuid-sandbox',
+      '--disable-dev-shm-usage',
+      '--disable-gpu',
+      '--no-zygote',
+      '--single-process',
+    ]
+  });
+}
+
 const COURSE_DESCRIPTIONS = {
-  'web development': 'This is to certify that the candidate has successfully completed the Web Development course at Persevex, demonstrating strong commitment and competence throughout the program.',
-  'data science': 'This is to certify that the candidate has successfully completed the Data Science course at Persevex, demonstrating analytical skills and dedication throughout the program.',
+  'web development':  'This is to certify that the candidate has successfully completed the Web Development course at Persevex, demonstrating strong commitment and competence throughout the program.',
+  'data science':     'This is to certify that the candidate has successfully completed the Data Science course at Persevex, demonstrating analytical skills and dedication throughout the program.',
   'machine learning': 'This is to certify that the candidate has successfully completed the Machine Learning course at Persevex, showcasing technical excellence and problem-solving ability.',
-  'cybersecurity': 'This is to certify that the candidate has successfully completed the Cybersecurity course at Persevex, demonstrating expertise in securing digital systems.',
-  'ui/ux design': 'This is to certify that the candidate has successfully completed the UI/UX Design course at Persevex, showing creativity and user-centered design thinking.',
-  'cloud computing': 'This is to certify that the candidate has successfully completed the Cloud Computing course at Persevex, demonstrating proficiency in modern cloud platforms.',
-  'digital marketing': 'This is to certify that the candidate has successfully completed the Digital Marketing course at Persevex, demonstrating strategic and creative marketing skills.',
+  'cybersecurity':    'This is to certify that the candidate has successfully completed the Cybersecurity course at Persevex, demonstrating expertise in securing digital systems.',
+  'ui/ux design':     'This is to certify that the candidate has successfully completed the UI/UX Design course at Persevex, showing creativity and user-centered design thinking.',
+  'cloud computing':  'This is to certify that the candidate has successfully completed the Cloud Computing course at Persevex, demonstrating proficiency in modern cloud platforms.',
+  'digital marketing':'This is to certify that the candidate has successfully completed the Digital Marketing course at Persevex, demonstrating strategic and creative marketing skills.',
 };
 
 const normalize = (row) => {
@@ -69,23 +83,6 @@ const normalize = (row) => {
   };
 };
 
-const PDF_OPTIONS = {
-  format: null,
-  width: '1122px',
-  height: '794px',
-  printBackground: true,
-  margin: { top: '0px', bottom: '0px', left: '0px', right: '0px' },
-  args: [
-    '--no-sandbox',
-    '--disable-setuid-sandbox',
-    '--disable-dev-shm-usage',
-    '--disable-gpu',
-    '--no-first-run',
-    '--no-zygote',
-    '--single-process',
-  ]
-};
-
 // POST /api/bulk/generate
 router.post('/generate', upload.single('csvFile'), async (req, res) => {
   try {
@@ -99,14 +96,17 @@ router.post('/generate', upload.single('csvFile'), async (req, res) => {
     const records = csv.parse(fileContent, { columns: true, skip_empty_lines: true, trim: true });
     if (!records.length) return res.status(400).json({ error: 'CSV file is empty' });
 
-    const batchId  = uuidv4();
+    const batchId   = uuidv4();
     const outputDir = path.join(__dirname, '../output', batchId);
     fs.mkdirSync(outputDir, { recursive: true });
 
     const results = [];
     const errors  = [];
 
-    if (htmlPdf) {
+    if (puppeteer) {
+      // Launch browser ONCE for all certificates — much faster
+      const browser = await launchBrowser();
+
       for (let i = 0; i < records.length; i++) {
         const data = normalize(records[i]);
         try {
@@ -114,7 +114,15 @@ router.post('/generate', upload.single('csvFile'), async (req, res) => {
           const filename = `cert_${data.recipientName.replace(/\s+/g, '_')}_${i + 1}.pdf`;
           const filePath = path.join(outputDir, filename);
 
-          const pdfBuffer = await htmlPdf.generatePdf({ content: html }, PDF_OPTIONS);
+          const page = await browser.newPage();
+          await page.setContent(html, { waitUntil: 'networkidle0' });
+          const pdfBuffer = await page.pdf({
+            width: '1122px',
+            height: '794px',
+            printBackground: true,
+            margin: { top: '0px', bottom: '0px', left: '0px', right: '0px' }
+          });
+          await page.close();
           fs.writeFileSync(filePath, pdfBuffer);
 
           if (Certificate) {
@@ -135,7 +143,9 @@ router.post('/generate', upload.single('csvFile'), async (req, res) => {
         }
       }
 
-      // Stream ZIP directly — no persistent storage needed
+      await browser.close();
+
+      // Stream ZIP directly
       if (archiver && results.length > 0) {
         const zipFilename = `batch_${batchId}.zip`;
         res.setHeader('Content-Type', 'application/zip');

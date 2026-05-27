@@ -6,16 +6,14 @@ const { v4: uuidv4 } = require('uuid');
 const { generateCertificateHTML, generatePersevexHTML, generateCustomHTML } = require('../utils/generateHTML');
 const { PREBUILT_TEMPLATES } = require('../data/prebuiltTemplates');
 
-let Template, Certificate, htmlPdf;
+let Template, Certificate, puppeteer;
 try { Template = require('../models/Template'); } catch (e) {}
 try { Certificate = require('../models/Certificate'); } catch (e) {}
-try { htmlPdf = require('html-pdf-node'); } catch (e) { console.log('html-pdf-node not available'); }
+try { puppeteer = require('puppeteer'); } catch (e) { console.log('puppeteer not available'); }
 
 async function getTemplate(id) {
-  // Check prebuilt first (string IDs like 'prebuilt-1')
   const prebuilt = PREBUILT_TEMPLATES.find(t => t._id === id);
   if (prebuilt) return prebuilt;
-
   if (Template) {
     const mongoose = require('mongoose');
     if (!mongoose.Types.ObjectId.isValid(id)) return null;
@@ -35,36 +33,29 @@ function buildHTML(template, data) {
   return generateCertificateHTML(template, data);
 }
 
-const PDF_OPTIONS = {
-  format: null,
-  width: '1122px',
-  height: '794px',
-  printBackground: true,
-  margin: { top: '0px', bottom: '0px', left: '0px', right: '0px' },
-  args: [
-    '--no-sandbox',
-    '--disable-setuid-sandbox',
-    '--disable-dev-shm-usage',
-    '--disable-gpu',
-    '--no-first-run',
-    '--no-zygote',
-    '--single-process',
-  ]
-};
+async function launchBrowser() {
+  return await puppeteer.launch({
+    executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
+    args: [
+      '--no-sandbox',
+      '--disable-setuid-sandbox',
+      '--disable-dev-shm-usage',
+      '--disable-gpu',
+      '--no-zygote',
+      '--single-process',
+    ]
+  });
+}
 
 // POST /api/certificates/preview
 router.post('/preview', async (req, res) => {
   try {
     const { templateId, templateOverride, recipientName, dateFrom, dateTo, customBody } = req.body;
 
-    // Use templateOverride directly if provided (live preview from editor)
     let template = templateOverride || null;
-
-    // Only look up by ID if no override provided
     if (!template && templateId) {
       template = await getTemplate(templateId);
     }
-
     if (!template) return res.status(404).json({ error: 'Template not found' });
 
     const html = buildHTML(template, {
@@ -103,9 +94,9 @@ router.post('/generate', async (req, res) => {
     const safeName = (recipientName || 'cert').replace(/\s+/g, '_');
     const filename = `cert_${safeName}_${uuidv4().slice(0, 8)}.pdf`;
 
-    if (!htmlPdf) {
-      // Fallback: return HTML file
-      const outDir  = path.join(__dirname, '../output');
+    // Fallback if puppeteer not available
+    if (!puppeteer) {
+      const outDir = path.join(__dirname, '../output');
       fs.mkdirSync(outDir, { recursive: true });
       const filePath = path.join(outDir, filename.replace('.pdf', '.html'));
       fs.writeFileSync(filePath, html);
@@ -116,7 +107,16 @@ router.post('/generate', async (req, res) => {
       });
     }
 
-    const pdfBuffer = await htmlPdf.generatePdf({ content: html }, PDF_OPTIONS);
+    const browser = await launchBrowser();
+    const page    = await browser.newPage();
+    await page.setContent(html, { waitUntil: 'networkidle0' });
+    const pdfBuffer = await page.pdf({
+      width: '1122px',
+      height: '794px',
+      printBackground: true,
+      margin: { top: '0px', bottom: '0px', left: '0px', right: '0px' }
+    });
+    await browser.close();
 
     if (Certificate) {
       const mongoose = require('mongoose');
